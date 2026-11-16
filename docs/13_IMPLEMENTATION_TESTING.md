@@ -2,7 +2,7 @@
 
 **Document:** `13_IMPLEMENTATION_TESTING.md`\
 **Product:** Life Analytics\
-**Version:** 1.0 (V1)\
+**Version:** 1.1 (V1 — backup and restore update)\
 **Status:** Implementation and quality plan\
 **Platform:** Android-only\
 **Development environment:** Antigravity Remote\
@@ -206,6 +206,18 @@ For high-risk changes, stop and ask for approval before acting.
 Implement in small, verifiable milestones. Do not start every feature at
 once.
 
+### Milestone -1 — Existing data audit and safety snapshot (do this first)
+
+- Inspect the actual Android project before changing code.
+- Confirm application ID/package name, current version/versionCode, signing identity if available, Room database name/version, entities, DAOs, migrations, database file location, and whether WAL mode or other sidecar files are in use.
+- Inspect Android backup rules, manifest backup attributes, and any existing export/backup code. Do not assume Android Auto Backup is enabled or complete.
+- Identify all user-owned tables/preferences and any files outside Room that are required to reconstruct app data.
+- Do not modify, reset, delete, migrate, or uninstall the existing app during this audit.
+- Create a consistent backup/export outside app-private storage using a verified method, if the current app/project allows it. Read it back and validate it. If no safe backup path exists, stop before risky changes and report the exact blocker and safest next action.
+- Record findings and backup verification evidence. Never claim the data is protected until a restore test succeeds.
+
+**Exit criteria:** Existing database and app identity are documented; current data has a verified external safety copy, or implementation is explicitly blocked pending a safe way to create one.
+
 ### Milestone 0 --- Remote environment preflight
 
 -   Inspect remote operating system and architecture.
@@ -244,6 +256,18 @@ dependencies.
 
 **Exit criteria:** DAO and domain tests pass; schema follows
 `11_DATA_ARCHITECTURE.md`.
+
+### Milestone 2A — Portable backup and restore (required)
+
+- Implement a documented, versioned backup archive for all user-owned records and required preferences.
+- Store the backup outside app-private storage through a user-selected external/document provider. Confirm actual cloud-provider availability before promising cloud upload.
+- Add authenticated encryption and a recovery method that remains usable after uninstall; do not rely solely on an app-scoped Keystore key.
+- Implement manual backup, backup verification, restore preview, explicit restore confirmation, and failure-safe restore.
+- Preserve the previous verified backup until a replacement has been verified.
+- Add clear status/error reporting without exposing personal data or secrets in logs.
+- Do not add multi-device synchronization in this milestone.
+
+**Exit criteria:** Automated tests pass and a physical-device test proves that a backup can be created outside app storage, the app can be uninstalled/reinstalled, and the backup can be restored with record counts and representative records matching.
 
 ### Milestone 3 --- Daily Planning
 
@@ -364,6 +388,13 @@ calculations. - Empty vs zero vs insufficient-data states.
 -   Transaction rollback on partial failure.
 -   Migrations from every supported previous schema.
 -   Historical data preservation.
+-   Backup archive manifest and format-version validation.
+-   Backup integrity/authentication failure is detected before restore.
+-   Export includes every approved user-data entity and required preferences.
+-   Restore into a clean install reproduces record counts and representative values.
+-   Failed restore leaves the pre-restore database intact.
+-   Wrong/missing recovery password or key produces a safe failure and does not corrupt local data.
+-   A new backup does not replace the previous known-good backup until verification succeeds.
 
 ### 6.3 UI tests
 
@@ -395,7 +426,9 @@ Otherwise, mark the scenario as requiring manual phone verification.
 -   Battery saver/background restriction.
 -   Low storage.
 -   App upgrade over an earlier installed version.
--   Uninstall/reinstall behaviour and data consequences.
+-   Uninstall/reinstall recovery from a verified backup stored outside app-private storage.
+-   Verify restore on the same phone after reinstall; separately test another device only if supported.
+-   Verify Android Auto Backup is not misreported as the sole guaranteed recovery path.
 
 Do not mark an unavailable emulator/device test as passed.
 
@@ -664,6 +697,8 @@ reasonably investigate itself.
 -   [ ] Critical and high-severity defects resolved.
 -   [ ] Relevant unit tests pass.
 -   [ ] Database tests and migrations pass.
+-   [ ] Backup and restore tests pass, including real-device uninstall/reinstall recovery.
+-   [ ] Last-known-good external backup is verified before any destructive operation.
 -   [ ] UI tests pass where runnable.
 -   [ ] Permission scenarios verified or explicitly marked not run.
 -   [ ] Focus lifecycle scenarios verified or marked for manual phone

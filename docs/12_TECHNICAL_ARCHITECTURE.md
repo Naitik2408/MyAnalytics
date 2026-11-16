@@ -2,7 +2,7 @@
 
 **Document:** `12_TECHNICAL_ARCHITECTURE.md`\
 **Product:** Life Analytics\
-**Version:** 1.0 (V1)\
+**Version:** 1.1 (V1 — backup and restore update)\
 **Status:** Implementation architecture specification\
 **Target:** Android-only, single-user, local-first application\
 **Development environment:** Antigravity Remote\
@@ -48,8 +48,7 @@ physical device. Real-device verification remains part of acceptance.
 6.  Clear separation between UI, domain rules, and data access.
 7.  One source of truth for every business record and calculation.
 8.  Minimal dependencies; avoid libraries without a concrete V1 need.
-9.  No mandatory backend, account, cloud service, or network permission
-    in V1.
+9.  No mandatory backend or account for ordinary offline app use. A separately consented backup destination is required for uninstall-safe recovery; do not add cloud sync.
 10. Ask for Android permissions only when a user invokes a feature that
     needs them.
 11. Handle denied permissions and restricted device states without
@@ -57,7 +56,7 @@ physical device. Real-device verification remains part of acceptance.
 12. Build and test from the remote environment throughout development.
 13. Never claim a feature or build works without evidence from a
     successful build/test.
-14. Preserve user data through app restarts and schema migrations.
+14. Preserve user data through app restarts, APK upgrades, schema migrations, and verified backup/restore across uninstall/reinstall.
 
 ## 3. Chosen technology stack
 
@@ -355,6 +354,29 @@ Use Room with SQLite, following `11_DATA_ARCHITECTURE.md`.
 -   Preserve existing user data during upgrades.
 -   Test migrations using representative prior database versions.
 -   Provide a clear recovery path if database access fails.
+
+### 7.4 Uninstall-safe backup and restore (required)
+
+**Goal:** A user can uninstall Life Analytics, reinstall it later, and recover the records included in the last successfully completed backup. App-private Room data alone cannot provide this guarantee.
+
+Architecture rules:
+
+1. Room/SQLite remains the authoritative live database. Backup is a separate, portable snapshot, not a second live source of truth.
+2. The backup destination must be outside the app-private sandbox. Support a user-selected document/provider destination through Android's Storage Access Framework where feasible. A cloud provider such as Google Drive may be used only after its provider integration, authentication, permissions, upload, download, and restore flow are verified. Do not assume the user's separate APK-upload folder is accessible to the app.
+3. Do not rely solely on Android Auto Backup or device-transfer backup for the uninstall-recovery guarantee. It may be an additional layer, with exact backup rules and restore limitations documented.
+4. Before implementing a provider, inspect the existing project, database schema, app ID, current backup configuration, dependencies, and available Android APIs. Report the proposed destination/provider and any user action/credential/consent genuinely required. Do not invent credentials or silently connect an account.
+5. Create a consistent snapshot. Prefer a Room/SQLite-safe export or transactionally consistent backup; do not copy a live database file while writes are in progress without a supported consistency mechanism. Handle WAL/sidecar state only through a supported database backup mechanism.
+6. Use a versioned archive with a manifest: backup-format version, creation timestamp, app version, database schema version, included datasets, and record counts. Include required preferences. Exclude secrets, logs, APKs, and unrelated files.
+7. Encrypt backup contents with authenticated encryption (for example AES-GCM) and use a key-recovery design that survives uninstall. Do not depend only on an Android Keystore key that may be removed on uninstall. If using a user-held recovery password, derive the key with a reviewed password-based KDF and unique random salt; explain that losing the password can make the backup unrecoverable. Never log or upload the password/key. Do not implement custom cryptography.
+8. Verify a completed backup by reading it back and validating authentication/integrity, manifest, format/schema version, and record counts. Report success only after verification. Preserve the previous known-good backup until a replacement is verified.
+9. Restore must validate the backup before changing live data, show its date/version/record counts, and require explicit confirmation. Create a safety copy of current data before replacement. Restore atomically where feasible; if any step fails, retain the pre-restore database and report failure. Define duplicate/merge behaviour; never silently merge or overwrite.
+10. Provide clear backup status: last successful backup time, destination, result, and actionable failure state. A pending/failed backup must never be labelled successful.
+11. Automatic background backup is a later increment after manual backup/restore is proven. Use WorkManager only for deferrable work, respect network/battery constraints, and never promise an exact execution time. Keep manual backup and restore available.
+12. Cloud sync, multi-device concurrent editing, and a mandatory online account are explicitly out of scope for this change.
+
+**Implementation order:** (a) audit the current app and protect the existing database with a verified pre-change backup; (b) implement and test manual encrypted backup and restore to an external destination; (c) verify uninstall/reinstall recovery on the physical phone; (d) only then add scheduled cloud backup if the selected provider supports it reliably.
+
+**Critical safety rule:** Never uninstall the current app, clear its storage, reset Room, use destructive migration fallbacks, or replace the current database during development/testing until a backup has been created outside app-private storage and its restore has been verified.
 
 ## 8. Focus timer and Android lifecycle
 
@@ -776,9 +798,10 @@ test reports the result.
 -   Do not log personal reflection text, task titles, or finance
     amounts.
 -   Keep signing secrets out of source control.
--   Avoid exporting personal data automatically.
--   If backup is enabled, document what Android backs up and how the
-    user can control it.
+-   Do not transmit personal data to a backup destination without explicit user consent and a clearly identified destination.
+-   Encrypt portable backups with authenticated encryption and document recovery-key handling.
+-   Never log backup passwords, encryption keys, reflection text, task titles, or finance details.
+-   Document Android Auto Backup separately; it is not the sole uninstall-recovery mechanism.
 -   Data deletion behaviour must be explicit and tested.
 -   Do not claim encryption at rest unless an actual encryption design
     is implemented and verified.
@@ -812,6 +835,9 @@ test reports the result.
 -   [ ] Focus duration is based on persisted valid intervals.
 -   [ ] Process death does not invent focus time.
 -   [ ] Database migrations preserve existing data.
+-   [ ] Backup is stored outside app-private storage, integrity-verified, and encrypted.
+-   [ ] Restore is validated, confirmed by the user, and failure-safe.
+-   [ ] Uninstall/reinstall recovery has been tested on a real device using the external backup.
 
 ### Permissions and errors
 
@@ -852,7 +878,8 @@ Remote capabilities:
 6.  Supported artifact export/download mechanism from Antigravity
     Remote.
 7.  Release signing and secure key retention mechanism.
-8.  Whether Android backup is enabled and its exact data scope.
+8.  Which external backup destination/provider is supported and verified, including authentication and recovery-key UX.
+9.  Whether Android Auto Backup is enabled as an additional convenience and its exact data scope.
 9.  Whether reminders are included in V1; default recommendation remains
     deferred.
 10. Whether a foreground service is truly required for any approved

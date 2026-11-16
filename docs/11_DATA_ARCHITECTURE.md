@@ -2,7 +2,7 @@
 
 **Document:** `11_DATA_ARCHITECTURE.md`\
 **Product:** Life Analytics\
-**Version:** 1.0 (V1)\
+**Version:** 1.1 (V1 — data protection update)\
 **Status:** Data architecture specification\
 **Platform:** Android-only\
 **Related documents:** `01_PRODUCT_OVERVIEW.md` through
@@ -36,7 +36,7 @@ The exact database library and implementation details are finalized in
 ## 2. Architecture principles
 
 1.  **Single source of truth:** Each fact is owned by one entity/module.
-2.  **Local-first:** V1 data is stored on the Android device.
+2.  **Local-first:** The Room database on the Android device remains the primary source of truth. A separate verified backup copy must exist outside the app sandbox so uninstalling the app does not destroy the only copy.
 3.  **No duplicate entry:** Derived screens read existing records.
 4.  **Stable IDs:** Records use persistent unique identifiers, not list
     positions.
@@ -97,11 +97,11 @@ decision. If Kotlin is selected, Room is a suitable SQLite abstraction.
 
 -   Core create, read, update, and delete operations must work without
     internet access.
--   Do not require login or a remote server for V1.
--   Do not make the app dependent on a third-party analytics service.
--   If cloud backup or sync is added later, it must be designed as a
-    separate capability with conflict handling and explicit user
-    consent.
+-   Core create, read, update, and delete operations must never depend on a network connection.
+-   A backup capability is in scope because app-private data is removed when the app is uninstalled.
+-   Backup is a separate copy, not a second live source of truth.
+-   Cloud synchronization and multi-device editing are out of scope for this stage.
+-   The cloud provider and authentication approach must be selected only after the existing project and available provider capabilities are audited.
 
 ## 4. Entity overview
 
@@ -602,30 +602,33 @@ V1.
 
 ## 14. Backup, export, and recovery
 
-V1 must define how users can protect their personal records.
+The user must be able to uninstall Life Analytics, reinstall it later, and restore their previously saved records. App-private Room/SQLite storage alone cannot meet this requirement because Android removes app-private files on uninstall.
 
-Recommended requirements: - Do not claim that app data is backed up
-unless the backup mechanism is verified. - Consider a user-initiated
-export in a documented format as a future or separately scoped
-feature. - If Android backup is enabled, document exactly which app data
-is included and how restore works. - Database migrations must preserve
-records. - A failed migration must not silently wipe the database. -
-Recovery errors must be communicated clearly. - Reflection and finance
-data must receive the same privacy protection as other local records.
+Requirements:
 
-Backup/export implementation is finalized in
-`12_TECHNICAL_ARCHITECTURE.md`.
+- Room/SQLite remains the primary source of truth while the app is installed.
+- Maintain a separate backup copy outside the app-private sandbox. A backup stored only inside the app's internal files/cache/database directories is not an uninstall-safe backup.
+- The backup must include all user-owned records and the app preferences needed to interpret them: tasks, focus sessions and pause intervals, habits, schedule periods, habit completions, finance transactions, daily reviews, and relevant settings. Explicitly document any excluded data.
+- Use a versioned, documented backup format with a manifest containing format version, creation time, app version, database schema version, and record counts. Do not include credentials, signing keys, or unrelated device data.
+- Verify backup integrity before reporting success. Use a checksum or authenticated-encryption verification and validate the manifest and payload before restore.
+- Protect sensitive backup contents with authenticated encryption. The recovery design must remain usable after uninstall; do not rely solely on an Android Keystore key that may be removed with the app. If a user-held recovery password/key is required, explain that losing it can make the backup unrecoverable and never transmit it to the developer.
+- Restore must validate the backup before changing the live database. Restore transactionally where possible; preserve or create a pre-restore safety copy before replacing existing records. Never silently merge duplicate records or overwrite newer records without a defined policy and user-visible explanation.
+- Support a user-controlled export/backup destination outside app-private storage. A cloud provider can be used only after its actual integration and restore flow are verified. Do not assume that the Google Drive APK-upload folder or an installed Drive app automatically grants Life Analytics API access.
+- Android Auto Backup/device-transfer backup may be an additional convenience, but must not be the sole guarantee for uninstall recovery. Its behaviour depends on Android settings, account/device support, backup rules, and restore conditions.
+- Database migrations must preserve records. A failed migration must not silently wipe the database. Recovery errors must be communicated clearly.
+- Reflection and finance data must receive the same privacy protection as other local records.
+
+Backup/export implementation details are finalized in `12_TECHNICAL_ARCHITECTURE.md`; acceptance tests are in `13_IMPLEMENTATION_TESTING.md`.
 
 ## 15. Privacy and security
 
--   Keep all V1 personal data on-device.
+-   Keep the working copy of all V1 personal data on-device. A separately encrypted backup may be stored at a user-approved external/cloud destination.
 -   Do not send reflection text, finance transactions, or task titles to
     analytics providers.
 -   Avoid logging personal text or transaction amounts.
 -   Use Android application sandbox protections.
 -   Do not store secrets that the app does not need.
--   If export or cloud sync is added, make the data scope clear and
-    obtain explicit user action.
+-   Before creating or restoring an external/cloud backup, make its data scope and destination clear and obtain explicit user action/consent. Backup does not authorize cloud sync.
 -   Data deletion must have a clear, understandable effect.
 
 ## 16. Migration and schema versioning
@@ -674,6 +677,8 @@ Backup/export implementation is finalized in
 -   [ ] V1 works offline.
 -   [ ] Personal data is not sent to third-party analytics.
 -   [ ] Database migrations preserve existing records.
+-   [ ] A verified backup exists outside app-private storage and can be restored after uninstall/reinstall.
+-   [ ] Backup payload is versioned, integrity-checked, and protected with authenticated encryption.
 -   [ ] Deleting one record does not unexpectedly delete unrelated
     history.
 -   [ ] No fake sample data appears in a real user's account.
@@ -691,7 +696,7 @@ The following implementation choices must be confirmed in
 6.  Focus session midnight attribution and interruption recovery
     implementation.
 7.  Device timezone-change handling.
-8.  Android backup policy and user export scope.
+8.  Backup container/provider, authentication, encryption-key recovery, and user export/restore scope.
 9.  Whether any aggregate caching is justified by measured performance.
 10. Database migration and test strategy.
 
