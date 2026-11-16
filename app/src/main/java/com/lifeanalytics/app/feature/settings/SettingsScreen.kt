@@ -100,35 +100,26 @@ fun SettingsScreen(
             }
         }
 
-        // Currency Panel
+        // Currency Panel (Rule 7: Rupee symbol ₹ and Indian digit grouping)
         item {
             LaContainerPanel(
                 title = "Display Currency",
-                subtitle = "Single display currency used for Finance summaries and new entries. V1 does not perform foreign-exchange conversion."
+                subtitle = "All amounts use Indian Rupee (₹) with Indian digit grouping (e.g. ₹12,34,567)."
             ) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(spacing.space2),
                     verticalArrangement = Arrangement.spacedBy(spacing.space2)
                 ) {
-                    SupportedCurrency.entries.forEach { currency ->
-                        val isSelected = preferences.currencyCode.equals(currency.code, ignoreCase = true)
-                        LaFilterChip(
-                            label = currency.displayName,
-                            selected = isSelected,
-                            onClick = {
-                                if (!isSelected) {
-                                    scope.launch {
-                                        val existingCount = repository.countAllTransactions()
-                                        if (existingCount > 0) {
-                                            pendingCurrencyChange = currency
-                                        } else {
-                                            preferencesRepository.setCurrencyCode(currency.code)
-                                        }
-                                    }
-                                }
+                    val currency = SupportedCurrency.INR
+                    LaFilterChip(
+                        label = currency.displayName,
+                        selected = true,
+                        onClick = {
+                            scope.launch {
+                                preferencesRepository.setCurrencyCode(currency.code)
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
         }

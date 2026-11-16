@@ -23,6 +23,8 @@ import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +45,7 @@ import com.lifeanalytics.app.core.common.MoneyUtils
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaMicroProgressBar
 import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
@@ -72,6 +75,7 @@ fun DailyReviewScreen(
     val typography = LaTheme.typography
     val spacing = LaTheme.spacing
     val radii = LaTheme.radii
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var selectedDateEpoch by rememberSaveable { mutableStateOf(initialDate.toEpochDay()) }
@@ -137,129 +141,156 @@ fun DailyReviewScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var feedbackBanner by remember { mutableStateOf<String?>(null) }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas),
-        contentPadding = PaddingValues(
-            start = spacing.screenInset,
-            end = spacing.screenInset,
-            top = spacing.space3,
-            bottom = spacing.dockBottomClearance
-        ),
-        verticalArrangement = Arrangement.spacedBy(spacing.space3)
-    ) {
-        item {
-            LaScreenHeader(
-                title = "Daily Review",
-                subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
-                onNavigateBack = onNavigateBack
-            )
-        }
-
-        item {
-            DateSelectorBar(
-                selectedDate = selectedDate,
-                today = today,
-                onDateSelected = {
-                    selectedDateEpoch = it.toEpochDay()
-                    feedbackBanner = null
-                    errorMessage = null
-                }
-            )
-        }
-
-        if (errorMessage != null) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.canvas),
+            contentPadding = PaddingValues(
+                start = spacing.screenInset,
+                end = spacing.screenInset,
+                top = spacing.space3,
+                bottom = spacing.dockBottomClearance
+            ),
+            verticalArrangement = Arrangement.spacedBy(spacing.space3)
+        ) {
             item {
-                ErrorBanner(
-                    message = errorMessage!!,
-                    onDismiss = { errorMessage = null }
+                LaScreenHeader(
+                    title = "Daily Review",
+                    subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
+                    onNavigateBack = onNavigateBack
                 )
             }
-        }
 
-        if (feedbackBanner != null) {
             item {
-                LaTintedTile(
-                    containerColor = tints.mint.soft,
-                    shape = radii.shapeSm
-                ) {
-                    Text(
-                        text = feedbackBanner!!,
-                        style = typography.body.copy(fontWeight = FontWeight.Medium),
-                        color = colors.textPrimary
+                DateSelectorBar(
+                    selectedDate = selectedDate,
+                    today = today,
+                    onDateSelected = {
+                        selectedDateEpoch = it.toEpochDay()
+                        feedbackBanner = null
+                        errorMessage = null
+                    }
+                )
+            }
+
+            if (errorMessage != null) {
+                item {
+                    ErrorBanner(
+                        message = errorMessage!!,
+                        onDismiss = { errorMessage = null }
                     )
                 }
             }
-        }
 
-        // Automatic Daily Summary (Live Read-Only from source records)
-        item {
-            SectionHeader(
-                title = "Daily Summary",
-                actionLabel = savedReview?.status?.displayName
-            )
-        }
-
-        // 2x2 Bento of live source metrics using module tints
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                ) {
-                    LaStatTile(
-                        label = "Tasks",
-                        value = taskSummary.completionRatioText,
-                        supportingText = if (taskSummary.hasTasks) {
-                            "${taskSummary.completedCount} of ${taskSummary.totalCount} completed"
-                        } else {
-                            "No tasks planned"
-                        },
-                        icon = Icons.Outlined.CheckCircleOutline,
-                        containerColor = tints.lavender.base,
-                        modifier = Modifier.weight(1f)
-                    )
-                    LaStatTile(
-                        label = "Focused time",
-                        value = DateAttributionPolicy.formatDurationSeconds(completedFocusSeconds),
-                        supportingText = "${sessionsForDate.count { it.status == FocusSessionStatus.COMPLETED }} session(s)",
-                        icon = Icons.Outlined.Timer,
-                        containerColor = tints.mint.base,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                ) {
-                    LaStatTile(
-                        label = "Habits",
-                        value = habitSummary.completionRatioText,
-                        supportingText = if (habitSummary.hasDueHabits) {
-                            "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due done"
-                        } else {
-                            "0 scheduled"
-                        },
-                        icon = Icons.Outlined.Repeat,
-                        containerColor = tints.butter.base,
-                        modifier = Modifier.weight(1f)
-                    )
-                    LaStatTile(
-                        label = "Expenses",
-                        value = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
-                        supportingText = if (financeSummary.totalIncomeMinor > 0L) {
-                            "Income: ${MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode)}"
-                        } else {
-                            "${financeSummary.transactionCount} transaction(s)"
-                        },
-                        icon = Icons.Outlined.AccountBalanceWallet,
-                        containerColor = tints.blue.base,
-                        modifier = Modifier.weight(1f)
-                    )
+            if (feedbackBanner != null) {
+                item {
+                    LaTintedTile(
+                        containerColor = tints.mint.soft,
+                        shape = radii.shapeSm
+                    ) {
+                        Text(
+                            text = feedbackBanner!!,
+                            style = typography.body.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary
+                        )
+                    }
                 }
             }
-        }
+
+            // Automatic Daily Summary (Live Read-Only from source records)
+            item {
+                SectionHeader(
+                    title = "Daily Summary",
+                    actionLabel = savedReview?.status?.displayName
+                )
+            }
+
+            // 2x2 Bento of live source metrics using module tints (Rule 2, Rule 6, Rule 8)
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                    ) {
+                        LaStatTile(
+                            label = "Tasks",
+                            value = if (taskSummary.hasTasks) taskSummary.completionRatioText else "0",
+                            supportingText = if (taskSummary.hasTasks) {
+                                "${taskSummary.completedCount} of ${taskSummary.totalCount} completed"
+                            } else {
+                                "No tasks planned"
+                            },
+                            icon = Icons.Outlined.CheckCircleOutline,
+                            containerColor = tints.lavender.base,
+                            isEmptyValue = !taskSummary.hasTasks,
+                            minHeight = 148.dp,
+                            modifier = Modifier.weight(1f),
+                            microVisual = if (taskSummary.hasTasks) {
+                                {
+                                    LaMicroProgressBar(
+                                        progress = taskSummary.completedCount.toFloat() / taskSummary.totalCount.toFloat(),
+                                        trackColor = colors.surface.copy(alpha = 0.65f),
+                                        fillColor = colors.ink
+                                    )
+                                }
+                            } else null
+                        )
+                        LaStatTile(
+                            label = "Focused time",
+                            value = DateAttributionPolicy.formatSummaryDuration(completedFocusSeconds),
+                            supportingText = "${sessionsForDate.count { it.status == FocusSessionStatus.COMPLETED }} session(s)",
+                            icon = Icons.Outlined.Timer,
+                            containerColor = tints.mint.base,
+                            isEmptyValue = completedFocusSeconds == 0L,
+                            minHeight = 148.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                    ) {
+                        LaStatTile(
+                            label = "Habits",
+                            value = if (habitSummary.hasDueHabits) habitSummary.completionRatioText else "0",
+                            supportingText = if (habitSummary.hasDueHabits) {
+                                "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due done"
+                            } else {
+                                "0 scheduled"
+                            },
+                            icon = Icons.Outlined.Repeat,
+                            containerColor = tints.butter.base,
+                            isEmptyValue = !habitSummary.hasDueHabits,
+                            minHeight = 148.dp,
+                            modifier = Modifier.weight(1f),
+                            microVisual = if (habitSummary.hasDueHabits) {
+                                {
+                                    LaMicroProgressBar(
+                                        progress = habitSummary.completedDueCount.toFloat() / habitSummary.totalDueCount.toFloat(),
+                                        trackColor = colors.surface.copy(alpha = 0.65f),
+                                        fillColor = colors.ink
+                                    )
+                                }
+                            } else null
+                        )
+                        LaStatTile(
+                            label = "Expenses",
+                            value = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
+                            supportingText = if (financeSummary.totalIncomeMinor > 0L) {
+                                "Income: ${MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode)}"
+                            } else {
+                                "${financeSummary.transactionCount} transaction(s)"
+                            },
+                            icon = Icons.Outlined.AccountBalanceWallet,
+                            containerColor = tints.blue.base,
+                            isEmptyValue = !financeSummary.hasTransactions,
+                            minHeight = 148.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
 
         // Planned vs Actual Tasks Section
         item {
@@ -437,6 +468,7 @@ fun DailyReviewScreen(
                                     ).onSuccess {
                                         feedbackBanner = "Draft saved for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
                                         errorMessage = null
+                                        snackbarHostState.showSnackbar("Draft saved")
                                     }.onFailure { err ->
                                         errorMessage = err.message ?: "Could not save draft."
                                     }
@@ -459,6 +491,7 @@ fun DailyReviewScreen(
                                     ).onSuccess {
                                         feedbackBanner = "Daily review completed for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
                                         errorMessage = null
+                                        snackbarHostState.showSnackbar("Review completed")
                                     }.onFailure { err ->
                                         errorMessage = err.message ?: "Could not complete review."
                                     }
@@ -534,5 +567,13 @@ fun DailyReviewScreen(
                 }
             }
         }
+    }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = spacing.dockBottomClearance)
+        )
     }
 }

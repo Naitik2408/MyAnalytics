@@ -41,11 +41,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaFilterChip
 import com.lifeanalytics.app.core.designsystem.LaHeroPanel
+import com.lifeanalytics.app.core.designsystem.LaModuleEmptyState
 import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
@@ -70,9 +70,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class StartFocusMode(val label: String) {
-    EXISTING_TASK("Choose a planned task"),
-    NEW_TASK("Create a task and start"),
-    GENERAL("Start general focus")
+    EXISTING_TASK("Planned task"),
+    NEW_TASK("New task"),
+    GENERAL("General focus")
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -104,6 +104,7 @@ fun FocusScreen(
     var newTaskTitle by rememberSaveable { mutableStateOf("") }
     var newTaskCategory by rememberSaveable { mutableStateOf(TaskCategory.STUDY) }
     var generalDescription by rememberSaveable { mutableStateOf("") }
+    var selectedPresetMinutes by rememberSaveable { mutableStateOf(25) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isActionInProgress by remember { mutableStateOf(false) }
@@ -204,24 +205,33 @@ fun FocusScreen(
         if (statusMessage != null) {
             item {
                 LaTintedTile(
-                    containerColor = tints.mint.soft,
-                    shape = radii.shapeSm
+                    containerColor = tints.mint.base,
+                    shape = radii.shapeMd
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = statusMessage!!,
-                            style = typography.body,
-                            color = colors.textPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Session saved",
+                                style = typography.cardTitle,
+                                color = colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = statusMessage!!,
+                                style = typography.body,
+                                color = colors.onTintSecondary
+                            )
+                        }
                         Spacer(modifier = Modifier.width(spacing.space2))
                         LaSecondaryButton(
-                            text = "OK",
-                            onClick = { statusMessage = null }
+                            text = "Done",
+                            onClick = { statusMessage = null },
+                            containerColor = colors.surface.copy(alpha = 0.85f),
+                            contentColor = colors.textPrimary
                         )
                     }
                 }
@@ -286,7 +296,7 @@ fun FocusScreen(
                             scope.launch {
                                 repository.finishFocusSession(currentSession.id)
                                     .onSuccess { finished ->
-                                        statusMessage = "Focus session saved: ${DateAttributionPolicy.formatSummaryDuration(finished.focusedDurationSeconds)} recorded."
+                                        statusMessage = "${finished.displayTitle} · ${DateAttributionPolicy.formatSummaryDuration(finished.focusedDurationSeconds)} recorded."
                                     }
                                     .onFailure { errorMessage = it.message }
                                 isActionInProgress = false
@@ -297,9 +307,11 @@ fun FocusScreen(
             }
         } else {
             item {
-                LaContainerPanel(
+                LaHeroPanel(
                     title = "Start a focus session",
-                    subtitle = "Paused time is excluded automatically. Recorded focus time measures active timer intervals."
+                    subtitle = "Paused time is excluded automatically",
+                    icon = Icons.Outlined.Timer,
+                    containerColor = tints.mint.strong
                 ) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(spacing.space2),
@@ -317,15 +329,61 @@ fun FocusScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(spacing.space4))
+                    Spacer(modifier = Modifier.height(spacing.space3))
+
+                    Text(
+                        text = "Session pace reference",
+                        style = typography.label,
+                        color = colors.onTintSecondary
+                    )
+                    Spacer(modifier = Modifier.height(spacing.space1))
+                    Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
+                        listOf(15, 25, 45, 60).forEach { preset ->
+                            val isPresetSelected = selectedPresetMinutes == preset
+                            Surface(
+                                shape = radii.shapeFull,
+                                color = if (isPresetSelected) colors.ink else colors.surface.copy(alpha = 0.72f),
+                                modifier = Modifier.clickable { selectedPresetMinutes = preset }
+                            ) {
+                                Text(
+                                    text = "${preset}m",
+                                    style = typography.label.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (isPresetSelected) colors.onInk else colors.textPrimary,
+                                    modifier = Modifier.padding(horizontal = spacing.space3, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(spacing.space3))
 
                     when (startMode) {
                         StartFocusMode.EXISTING_TASK -> {
                             if (incompleteTasks.isEmpty()) {
                                 Text(
-                                    text = "No incomplete tasks planned for today. You can create a task and start, or start general focus.",
+                                    text = "No incomplete tasks planned for today. Switch to New task or General focus.",
                                     style = typography.body,
-                                    color = colors.textSecondary
+                                    color = colors.onTintSecondary
+                                )
+                                Spacer(modifier = Modifier.height(spacing.space3))
+                                LaPrimaryButton(
+                                    text = "Start general focus",
+                                    icon = Icons.Outlined.PlayArrow,
+                                    enabled = !isActionInProgress,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        isActionInProgress = true
+                                        errorMessage = null
+                                        scope.launch {
+                                            repository.startFocusSession(
+                                                taskId = null,
+                                                generalDescription = "General focus"
+                                            ).onFailure {
+                                                errorMessage = it.message
+                                            }
+                                            isActionInProgress = false
+                                        }
+                                    }
                                 )
                             } else {
                                 val effectiveTaskId = selectedTaskId?.takeIf { id ->
@@ -335,7 +393,7 @@ fun FocusScreen(
                                 Text(
                                     text = "Select a planned task:",
                                     style = typography.label,
-                                    color = colors.textSecondary
+                                    color = colors.onTintSecondary
                                 )
                                 Spacer(modifier = Modifier.height(spacing.space2))
 
@@ -347,7 +405,7 @@ fun FocusScreen(
                                                 .fillMaxWidth()
                                                 .clickable { selectedTaskId = task.id },
                                             shape = radii.shapeSm,
-                                            color = if (isSelected) tints.mint.base else colors.surfaceVariant
+                                            color = if (isSelected) colors.surface else colors.surface.copy(alpha = 0.65f)
                                         ) {
                                             Row(
                                                 modifier = Modifier
@@ -365,7 +423,7 @@ fun FocusScreen(
                                                     Text(
                                                         text = task.category.displayName,
                                                         style = typography.label,
-                                                        color = if (isSelected) colors.onTintSecondary else colors.textSecondary
+                                                        color = colors.textSecondary
                                                     )
                                                 }
                                                 if (isSelected) {
@@ -388,7 +446,7 @@ fun FocusScreen(
 
                                 Spacer(modifier = Modifier.height(spacing.space4))
                                 LaPrimaryButton(
-                                    text = "Start focus on selected task",
+                                    text = "Start focus",
                                     icon = Icons.Outlined.PlayArrow,
                                     enabled = !isActionInProgress,
                                     modifier = Modifier.fillMaxWidth(),
@@ -406,30 +464,37 @@ fun FocusScreen(
                         }
 
                         StartFocusMode.NEW_TASK -> {
-                            LaTextField(
-                                value = newTaskTitle,
-                                onValueChange = {
-                                    newTaskTitle = it
-                                    errorMessage = null
-                                },
-                                label = "New task name (required)",
-                                placeholder = "e.g. Write design summary",
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(spacing.space3))
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
-                                verticalArrangement = Arrangement.spacedBy(spacing.space2)
+                            Surface(
+                                shape = radii.shapeMd,
+                                color = colors.surface.copy(alpha = 0.85f)
                             ) {
-                                TaskCategory.entries.forEach { cat ->
-                                    LaFilterChip(
-                                        label = cat.displayName,
-                                        selected = newTaskCategory == cat,
-                                        onClick = { newTaskCategory = cat }
+                                Column(modifier = Modifier.padding(spacing.space3)) {
+                                    LaTextField(
+                                        value = newTaskTitle,
+                                        onValueChange = {
+                                            newTaskTitle = it
+                                            errorMessage = null
+                                        },
+                                        label = "New task name",
+                                        placeholder = "e.g. Write design summary",
+                                        singleLine = true
                                     )
+                                    Spacer(modifier = Modifier.height(spacing.space2))
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                                        verticalArrangement = Arrangement.spacedBy(spacing.space2)
+                                    ) {
+                                        TaskCategory.entries.forEach { cat ->
+                                            LaFilterChip(
+                                                label = cat.displayName,
+                                                selected = newTaskCategory == cat,
+                                                onClick = { newTaskCategory = cat }
+                                            )
+                                        }
+                                    }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(spacing.space4))
+                            Spacer(modifier = Modifier.height(spacing.space3))
                             LaPrimaryButton(
                                 text = "Save task and start focus",
                                 icon = Icons.Outlined.PlayArrow,
@@ -455,17 +520,24 @@ fun FocusScreen(
                         }
 
                         StartFocusMode.GENERAL -> {
-                            LaTextField(
-                                value = generalDescription,
-                                onValueChange = {
-                                    generalDescription = it
-                                    errorMessage = null
-                                },
-                                label = "Activity description (optional)",
-                                placeholder = "e.g. Reading or Deep work",
-                                singleLine = true
-                            )
-                            Spacer(modifier = Modifier.height(spacing.space4))
+                            Surface(
+                                shape = radii.shapeMd,
+                                color = colors.surface.copy(alpha = 0.85f)
+                            ) {
+                                Column(modifier = Modifier.padding(spacing.space3)) {
+                                    LaTextField(
+                                        value = generalDescription,
+                                        onValueChange = {
+                                            generalDescription = it
+                                            errorMessage = null
+                                        },
+                                        label = "Activity description (optional)",
+                                        placeholder = "e.g. Reading or Deep work",
+                                        singleLine = true
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(spacing.space3))
                             LaPrimaryButton(
                                 text = "Start general focus",
                                 icon = Icons.Outlined.PlayArrow,
@@ -496,8 +568,8 @@ fun FocusScreen(
         // Today's Session Timeline (Section 11.2.5)
         item {
             LaContainerPanel(
-                title = "Today's Session Timeline",
-                subtitle = "24-hour focus interval ruler"
+                title = "Today's focus timeline",
+                subtitle = "Today's sessions, excluding pauses"
             ) {
                 LaSessionTimeline(
                     segments = timelineSegments,
@@ -515,10 +587,14 @@ fun FocusScreen(
 
         if (historySessions.isEmpty()) {
             item {
-                EmptyStateCard(
-                    title = "No focus sessions yet",
-                    message = "Start a session linked to a planned task or as general focus. Completed sessions will appear here."
-                )
+                LaContainerPanel {
+                    LaModuleEmptyState(
+                        icon = Icons.Outlined.Timer,
+                        iconTint = tints.mint.base,
+                        title = "No focus sessions yet",
+                        message = "Start a session linked to a planned task or as general focus. Completed sessions will appear here."
+                    )
+                }
             }
         } else {
             item {

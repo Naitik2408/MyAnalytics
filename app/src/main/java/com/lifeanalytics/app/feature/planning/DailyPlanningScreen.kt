@@ -14,19 +14,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,7 +54,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeanalytics.app.core.designsystem.ConfirmDeleteDialog
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
-import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
 import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
 import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
@@ -54,6 +61,7 @@ import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaFilterChip
 import com.lifeanalytics.app.core.designsystem.LaHeroPanel
 import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
+import com.lifeanalytics.app.core.designsystem.LaModuleEmptyState
 import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
@@ -86,6 +94,7 @@ fun DailyPlanningScreen(
     val typography = LaTheme.typography
     val spacing = LaTheme.spacing
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val tasks by repository.observeTasksForDate(selectedDate)
         .collectAsStateWithLifecycle(initialValue = emptyList())
@@ -115,212 +124,223 @@ fun DailyPlanningScreen(
     val incompleteTasks = remember(filteredTasks) { filteredTasks.filter { !it.isCompleted } }
     val completedTasks = remember(filteredTasks) { filteredTasks.filter { it.isCompleted } }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas),
-        contentPadding = PaddingValues(
-            start = spacing.screenInset,
-            end = spacing.screenInset,
-            top = spacing.space3,
-            bottom = spacing.dockBottomClearance
-        ),
-        verticalArrangement = Arrangement.spacedBy(spacing.space3)
-    ) {
-        item {
-            LaScreenHeader(
-                title = "Daily Planning",
-                subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
-                onNavigateBack = onNavigateBack,
-                trailingContent = {
-                    LaPrimaryButton(
-                        text = "Add task",
-                        icon = Icons.Outlined.Add,
-                        onClick = {
-                            editingTask = null
-                            showTaskDialog = true
-                        }
-                    )
-                }
-            )
-        }
-
-        item {
-            DateSelectorBar(
-                selectedDate = selectedDate,
-                today = today,
-                onDateSelected = onDateChange
-            )
-        }
-
-        if (errorMessage != null) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.canvas),
+            contentPadding = PaddingValues(
+                start = spacing.screenInset,
+                end = spacing.screenInset,
+                top = spacing.space3,
+                bottom = spacing.dockBottomClearance
+            ),
+            verticalArrangement = Arrangement.spacedBy(spacing.space3)
+        ) {
             item {
-                ErrorBanner(
-                    message = errorMessage!!,
-                    onDismiss = { errorMessage = null }
+                LaScreenHeader(
+                    title = "Daily Planning",
+                    subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
+                    onNavigateBack = onNavigateBack,
+                    trailingContent = {
+                        LaPrimaryButton(
+                            text = "Add task",
+                            icon = Icons.Outlined.Add,
+                            onClick = {
+                                editingTask = null
+                                showTaskDialog = true
+                            }
+                        )
+                    }
                 )
             }
-        }
 
-        // Lavender Hero Panel for Daily Task Progress
-        item {
-            val plannedTimeText = summary.totalEstimatedMinutes?.let {
-                "Planned time (estimated): ${DateAttributionPolicy.formatSummaryMinutes(it)}"
-            } ?: "Planned time: No time estimates"
+            item {
+                DateSelectorBar(
+                    selectedDate = selectedDate,
+                    today = today,
+                    onDateSelected = onDateChange
+                )
+            }
 
-            LaHeroPanel(
-                title = "Your progress",
-                subtitle = plannedTimeText,
-                icon = Icons.Outlined.CheckCircleOutline,
-                containerColor = tints.lavender.strong
-            ) {
-                if (!summary.hasTasks) {
-                    Text(
-                        text = "No tasks planned",
-                        style = typography.metricEmptyValue,
-                        color = colors.textPrimary
-                    )
-                } else {
-                    Text(
-                        text = "${summary.completedCount} / ${summary.totalCount}",
-                        style = typography.metricValue,
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(spacing.space2))
-                    LaHorizontalTrackBar(
-                        label = "${summary.completedCount} of ${summary.totalCount} tasks completed",
-                        valueText = "${((summary.completedCount * 100) / summary.totalCount)}%",
-                        progress = summary.completedCount.toFloat() / summary.totalCount.toFloat(),
-                        tint = tints.lavender,
-                        useInkFill = true
+            if (errorMessage != null) {
+                item {
+                    ErrorBanner(
+                        message = errorMessage!!,
+                        onDismiss = { errorMessage = null }
                     )
                 }
             }
-        }
 
-        // Category Filter Row
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(spacing.space2)
-            ) {
-                LaFilterChip(
-                    label = "All",
-                    selected = selectedCategoryFilter == null,
-                    onClick = { selectedCategoryFilter = null }
-                )
-                TaskCategory.entries.forEach { category ->
+            // Lavender Hero Panel for Daily Task Progress (Rule 6: no 0 / 0)
+            item {
+                val plannedTimeText = summary.totalEstimatedMinutes?.let {
+                    "Planned time (estimated): ${DateAttributionPolicy.formatSummaryMinutes(it)}"
+                } ?: "No tasks planned"
+
+                LaHeroPanel(
+                    title = "Your progress",
+                    subtitle = plannedTimeText,
+                    icon = Icons.Outlined.CheckCircleOutline,
+                    containerColor = tints.lavender.strong
+                ) {
+                    if (!summary.hasTasks) {
+                        Text(
+                            text = "0",
+                            style = typography.metricEmptyValue,
+                            color = colors.onTintSecondary
+                        )
+                    } else {
+                        Text(
+                            text = "${summary.completedCount} / ${summary.totalCount}",
+                            style = typography.metricValue,
+                            color = colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(spacing.space2))
+                        LaHorizontalTrackBar(
+                            label = "${summary.completedCount} of ${summary.totalCount} tasks completed",
+                            valueText = "${((summary.completedCount * 100) / summary.totalCount)}%",
+                            progress = summary.completedCount.toFloat() / summary.totalCount.toFloat(),
+                            tint = tints.lavender,
+                            useInkFill = true
+                        )
+                    }
+                }
+            }
+
+            // Category Filter Row
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+                ) {
                     LaFilterChip(
-                        label = category.displayName,
-                        selected = selectedCategoryFilter == category,
-                        onClick = {
-                            selectedCategoryFilter = if (selectedCategoryFilter == category) null else category
-                        }
+                        label = "All",
+                        selected = selectedCategoryFilter == null,
+                        onClick = { selectedCategoryFilter = null }
                     )
-                }
-            }
-        }
-
-        item {
-            SectionHeader(
-                title = "Tasks",
-                actionLabel = "+ Add task",
-                onActionClick = {
-                    editingTask = null
-                    showTaskDialog = true
-                }
-            )
-        }
-
-        if (tasks.isEmpty()) {
-            item {
-                EmptyStateCard(
-                    title = "No tasks planned for this day",
-                    message = "Add the tasks you intend to work on. Planned time and duration estimates are optional.",
-                    actionLabel = "Add task",
-                    onActionClick = {
-                        editingTask = null
-                        showTaskDialog = true
+                    TaskCategory.entries.forEach { category ->
+                        LaFilterChip(
+                            label = category.displayName,
+                            selected = selectedCategoryFilter == category,
+                            onClick = {
+                                selectedCategoryFilter = if (selectedCategoryFilter == category) null else category
+                            }
+                        )
                     }
-                )
+                }
             }
-        } else if (filteredTasks.isEmpty()) {
+
             item {
-                EmptyStateCard(
-                    title = "No tasks in this category",
-                    message = "No tasks match the selected category filter on this date.",
-                    actionLabel = "Clear filter",
-                    onActionClick = { selectedCategoryFilter = null }
-                )
+                SectionHeader(title = "Tasks")
             }
-        } else {
-            if (incompleteTasks.isNotEmpty()) {
+
+            if (tasks.isEmpty()) {
                 item {
                     LaContainerPanel {
-                        incompleteTasks.forEachIndexed { index, task ->
-                            TaskRowItem(
-                                task = task,
-                                onToggleComplete = {
-                                    scope.launch {
-                                        repository.setTaskCompleted(task.id, !task.isCompleted)
-                                            .onFailure { errorMessage = it.message }
-                                    }
-                                },
-                                onEdit = {
-                                    editingTask = task
-                                    showTaskDialog = true
-                                },
-                                onDelete = { taskPendingDelete = task },
-                                onStartFocus = { onStartFocusForTask(task) }
-                            )
-                            if (index < incompleteTasks.lastIndex) {
-                                LaRowDivider()
+                        LaModuleEmptyState(
+                            icon = Icons.Outlined.EventNote,
+                            iconTint = tints.lavender.base,
+                            title = "No tasks planned for this day",
+                            message = "Add the tasks you intend to work on. Planned time and duration estimates are optional.",
+                            actionLabel = "Add task",
+                            onActionClick = {
+                                editingTask = null
+                                showTaskDialog = true
+                            }
+                        )
+                    }
+                }
+            } else if (filteredTasks.isEmpty()) {
+                item {
+                    LaContainerPanel {
+                        LaModuleEmptyState(
+                            icon = Icons.Outlined.EventNote,
+                            iconTint = tints.lavender.base,
+                            title = "No tasks in this category",
+                            message = "No tasks match the selected category filter on this date.",
+                            actionLabel = "Clear filter",
+                            onActionClick = { selectedCategoryFilter = null }
+                        )
+                    }
+                }
+            } else {
+                if (incompleteTasks.isNotEmpty()) {
+                    item {
+                        LaContainerPanel {
+                            incompleteTasks.forEachIndexed { index, task ->
+                                TaskRowItem(
+                                    task = task,
+                                    onToggleComplete = {
+                                        scope.launch {
+                                            repository.setTaskCompleted(task.id, !task.isCompleted)
+                                                .onFailure { errorMessage = it.message }
+                                        }
+                                    },
+                                    onEdit = {
+                                        editingTask = task
+                                        showTaskDialog = true
+                                    },
+                                    onDelete = { taskPendingDelete = task },
+                                    onStartFocus = { onStartFocusForTask(task) }
+                                )
+                                if (index < incompleteTasks.lastIndex) {
+                                    LaRowDivider()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (completedTasks.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(spacing.space1))
+                        Text(
+                            text = "Completed (${completedTasks.size})",
+                            style = typography.sectionTitle,
+                            color = colors.textSecondary
+                        )
+                    }
+                    item {
+                        LaContainerPanel {
+                            completedTasks.forEachIndexed { index, task ->
+                                TaskRowItem(
+                                    task = task,
+                                    onToggleComplete = {
+                                        scope.launch {
+                                            repository.setTaskCompleted(task.id, !task.isCompleted)
+                                                .onFailure { errorMessage = it.message }
+                                        }
+                                    },
+                                    onEdit = {
+                                        editingTask = task
+                                        showTaskDialog = true
+                                    },
+                                    onDelete = { taskPendingDelete = task },
+                                    onStartFocus = null
+                                )
+                                if (index < completedTasks.lastIndex) {
+                                    LaRowDivider()
+                                }
                             }
                         }
                     }
                 }
             }
-
-            if (completedTasks.isNotEmpty()) {
-                item {
-                    Spacer(modifier = Modifier.height(spacing.space1))
-                    Text(
-                        text = "Completed (${completedTasks.size})",
-                        style = typography.sectionTitle,
-                        color = colors.textSecondary
-                    )
-                }
-                item {
-                    LaContainerPanel {
-                        completedTasks.forEachIndexed { index, task ->
-                            TaskRowItem(
-                                task = task,
-                                onToggleComplete = {
-                                    scope.launch {
-                                        repository.setTaskCompleted(task.id, !task.isCompleted)
-                                            .onFailure { errorMessage = it.message }
-                                    }
-                                },
-                                onEdit = {
-                                    editingTask = task
-                                    showTaskDialog = true
-                                },
-                                onDelete = { taskPendingDelete = task },
-                                onStartFocus = null
-                            )
-                            if (index < completedTasks.lastIndex) {
-                                LaRowDivider()
-                            }
-                        }
-                    }
-                }
-            }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = spacing.dockBottomClearance)
+        )
     }
 
     if (showTaskDialog) {
+        val wasEditing = editingTask != null
         TaskFormDialog(
             initialTask = editingTask,
             defaultDate = selectedDate,
@@ -347,6 +367,9 @@ fun DailyPlanningScreen(
                 result.map {
                     showTaskDialog = false
                     editingTask = null
+                    scope.launch {
+                        snackbarHostState.showSnackbar(if (wasEditing) "Task updated" else "Task saved")
+                    }
                 }
             }
         )
@@ -359,6 +382,9 @@ fun DailyPlanningScreen(
             onConfirm = {
                 scope.launch {
                     repository.deleteTask(target.id)
+                        .onSuccess {
+                            snackbarHostState.showSnackbar("Task deleted")
+                        }
                         .onFailure { errorMessage = it.message }
                     taskPendingDelete = null
                 }
@@ -468,7 +494,7 @@ private fun TaskRowItem(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskFormDialog(
     initialTask: Task?,
@@ -487,6 +513,7 @@ fun TaskFormDialog(
     val spacing = LaTheme.spacing
     val radii = LaTheme.radii
     val scope = rememberCoroutineScope()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
     var category by rememberSaveable { mutableStateOf(initialTask?.category ?: TaskCategory.OTHER) }
@@ -502,159 +529,174 @@ fun TaskFormDialog(
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        shape = radii.shapeLg,
+        sheetState = sheetState,
+        shape = radii.shapeXlTop,
         containerColor = colors.surface,
-        title = {
+        contentColor = colors.textPrimary
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = spacing.cardPaddingLarge)
+                .padding(bottom = spacing.space6)
+                .imePadding(),
+            verticalArrangement = Arrangement.spacedBy(spacing.space3)
+        ) {
             Text(
                 text = if (initialTask == null) "Add task" else "Edit task",
                 style = typography.sectionTitle,
                 color = colors.textPrimary
             )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(spacing.space3)
+
+            LaTextField(
+                value = title,
+                onValueChange = {
+                    title = it
+                    validationError = null
+                },
+                label = "Task name",
+                placeholder = "e.g. Prepare project presentation",
+                singleLine = true
+            )
+
+            Text(
+                text = "Category",
+                style = typography.label,
+                color = colors.textSecondary
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                verticalArrangement = Arrangement.spacedBy(spacing.space2)
             ) {
-                LaTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        validationError = null
-                    },
-                    label = "Task name (required)",
-                    placeholder = "e.g. Prepare project presentation",
-                    singleLine = true
-                )
-
-                Text(
-                    text = "Category",
-                    style = typography.label,
-                    color = colors.textSecondary
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(spacing.space2),
-                    verticalArrangement = Arrangement.spacedBy(spacing.space2)
-                ) {
-                    TaskCategory.entries.forEach { cat ->
-                        LaFilterChip(
-                            label = cat.displayName,
-                            selected = category == cat,
-                            onClick = { category = cat }
-                        )
-                    }
-                }
-
-                LaTextField(
-                    value = plannedDateIso,
-                    onValueChange = {
-                        plannedDateIso = it
-                        validationError = null
-                    },
-                    label = "Planned date (YYYY-MM-DD)",
-                    singleLine = true
-                )
-
-                LaTextField(
-                    value = plannedTimeText,
-                    onValueChange = {
-                        plannedTimeText = it
-                        validationError = null
-                    },
-                    label = "Planned time (optional, HH:mm)",
-                    placeholder = "e.g. 10:00 or leave blank",
-                    singleLine = true
-                )
-
-                LaTextField(
-                    value = estimatedMinutesText,
-                    onValueChange = {
-                        estimatedMinutesText = it
-                        validationError = null
-                    },
-                    label = "Estimated duration in minutes (optional)",
-                    placeholder = "e.g. 30 or leave blank",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
-                    listOf(15, 30, 45, 60).forEach { preset ->
-                        Surface(
-                            shape = radii.shapeFull,
-                            color = colors.surfaceVariant,
-                            modifier = Modifier.clickable { estimatedMinutesText = preset.toString() }
-                        ) {
-                            Text(
-                                text = "${preset}m",
-                                style = typography.label.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.textPrimary,
-                                modifier = Modifier.padding(horizontal = spacing.space3, vertical = 6.dp)
-                            )
-                        }
-                    }
-                }
-
-                if (validationError != null) {
-                    Text(
-                        text = validationError!!,
-                        style = typography.label,
-                        color = colors.error
+                TaskCategory.entries.forEach { cat ->
+                    LaFilterChip(
+                        label = cat.displayName,
+                        selected = category == cat,
+                        onClick = { category = cat }
                     )
                 }
             }
-        },
-        confirmButton = {
-            LaPrimaryButton(
-                text = if (initialTask == null) "Save task" else "Save changes",
-                enabled = !isSaving,
-                onClick = {
-                    val parsedDate = try {
-                        DateAttributionPolicy.parseIsoDate(plannedDateIso.trim())
-                    } catch (_: Exception) {
-                        validationError = "Enter a valid date in YYYY-MM-DD format."
-                        return@LaPrimaryButton
-                    }
 
-                    val trimmedTime = plannedTimeText.trim()
-                    val parsedTime = if (trimmedTime.isEmpty()) {
-                        null
-                    } else {
-                        DateAttributionPolicy.parseLocalTimeOrNull(trimmedTime) ?: run {
-                            validationError = "Enter planned time in 24-hour HH:mm format (e.g. 09:30 or 14:00)."
-                            return@LaPrimaryButton
-                        }
-                    }
+            LaTextField(
+                value = plannedDateIso,
+                onValueChange = {
+                    plannedDateIso = it
+                    validationError = null
+                },
+                label = "Planned date (YYYY-MM-DD)",
+                singleLine = true
+            )
 
-                    val trimmedEstimate = estimatedMinutesText.trim()
-                    val parsedEstimate = if (trimmedEstimate.isEmpty()) {
-                        null
-                    } else {
-                        val value = trimmedEstimate.toIntOrNull()
-                        if (value == null || value <= 0 || value > 1440) {
-                            validationError = "Estimated duration must be between 1 and 1440 minutes."
-                            return@LaPrimaryButton
-                        }
-                        value
-                    }
+            LaTextField(
+                value = plannedTimeText,
+                onValueChange = {
+                    plannedTimeText = it
+                    validationError = null
+                },
+                label = "Planned time (optional, HH:mm)",
+                placeholder = "e.g. 10:00 or leave blank",
+                singleLine = true
+            )
 
-                    isSaving = true
-                    scope.launch {
-                        val res = onSave(title, category, parsedDate, parsedTime, parsedEstimate)
-                        isSaving = false
-                        res.onFailure { validationError = it.message ?: "Could not save task." }
+            LaTextField(
+                value = estimatedMinutesText,
+                onValueChange = {
+                    estimatedMinutesText = it
+                    validationError = null
+                },
+                label = "Estimated duration in minutes (optional)",
+                placeholder = "e.g. 30 or leave blank",
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
+                listOf(15, 30, 45, 60).forEach { preset ->
+                    Surface(
+                        shape = radii.shapeFull,
+                        color = colors.surfaceVariant,
+                        modifier = Modifier.clickable { estimatedMinutesText = preset.toString() }
+                    ) {
+                        Text(
+                            text = "${preset}m",
+                            style = typography.label.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary,
+                            modifier = Modifier.padding(horizontal = spacing.space3, vertical = 6.dp)
+                        )
                     }
                 }
-            )
-        },
-        dismissButton = {
-            LaSecondaryButton(
-                text = "Cancel",
-                enabled = !isSaving,
-                onClick = onDismiss
-            )
+            }
+
+            if (validationError != null) {
+                Text(
+                    text = validationError!!,
+                    style = typography.label,
+                    color = colors.error
+                )
+            }
+
+            Spacer(modifier = Modifier.height(spacing.space2))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+            ) {
+                LaSecondaryButton(
+                    text = "Cancel",
+                    enabled = !isSaving,
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                LaPrimaryButton(
+                    text = if (initialTask == null) "Save task" else "Update task",
+                    enabled = !isSaving,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        if (title.trim().isEmpty()) {
+                            validationError = "Enter a task name to continue."
+                            return@LaPrimaryButton
+                        }
+
+                        val parsedDate = try {
+                            DateAttributionPolicy.parseIsoDate(plannedDateIso.trim())
+                        } catch (_: Exception) {
+                            validationError = "Enter a valid date in YYYY-MM-DD format."
+                            return@LaPrimaryButton
+                        }
+
+                        val trimmedTime = plannedTimeText.trim()
+                        val parsedTime = if (trimmedTime.isEmpty()) {
+                            null
+                        } else {
+                            DateAttributionPolicy.parseLocalTimeOrNull(trimmedTime) ?: run {
+                                validationError = "Enter planned time in 24-hour HH:mm format (e.g. 09:30 or 14:00)."
+                                return@LaPrimaryButton
+                            }
+                        }
+
+                        val trimmedEstimate = estimatedMinutesText.trim()
+                        val parsedEstimate = if (trimmedEstimate.isEmpty()) {
+                            null
+                        } else {
+                            val value = trimmedEstimate.toIntOrNull()
+                            if (value == null || value <= 0 || value > 1440) {
+                                validationError = "Estimated duration must be between 1 and 1440 minutes."
+                                return@LaPrimaryButton
+                            }
+                            value
+                        }
+
+                        isSaving = true
+                        scope.launch {
+                            val res = onSave(title, category, parsedDate, parsedTime, parsedEstimate)
+                            isSaving = false
+                            res.onFailure { validationError = it.message ?: "Could not save task." }
+                        }
+                    }
+                )
+            }
         }
-    )
+    }
 }
