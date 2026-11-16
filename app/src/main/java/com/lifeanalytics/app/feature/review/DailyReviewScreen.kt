@@ -1,8 +1,9 @@
 package com.lifeanalytics.app.feature.review
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,27 +12,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircleOutline
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,14 +36,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.common.MoneyUtils
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
-import com.lifeanalytics.app.core.designsystem.MetricCard
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaStatTile
+import com.lifeanalytics.app.core.designsystem.LaTextField
+import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.SectionHeader
-import com.lifeanalytics.app.core.designsystem.SuccessGreen
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
@@ -59,7 +60,6 @@ import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyReviewScreen(
     repository: LifeAnalyticsRepository,
@@ -67,6 +67,12 @@ fun DailyReviewScreen(
     initialDate: LocalDate = DateAttributionPolicy.todayLocalDate(),
     onNavigateBack: (() -> Unit)? = null
 ) {
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
+
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var selectedDateEpoch by rememberSaveable { mutableStateOf(initialDate.toEpochDay()) }
     val selectedDate = LocalDate.ofEpochDay(selectedDateEpoch)
@@ -131,403 +137,398 @@ fun DailyReviewScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var feedbackBanner by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Daily Review") },
-                navigationIcon = {
-                    if (onNavigateBack != null) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back"
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space3,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space3)
+    ) {
+        item {
+            LaScreenHeader(
+                title = "Daily Review",
+                subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
+                onNavigateBack = onNavigateBack
             )
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+
+        item {
+            DateSelectorBar(
+                selectedDate = selectedDate,
+                today = today,
+                onDateSelected = {
+                    selectedDateEpoch = it.toEpochDay()
+                    feedbackBanner = null
+                    errorMessage = null
+                }
+            )
+        }
+
+        if (errorMessage != null) {
             item {
-                DateSelectorBar(
-                    selectedDate = selectedDate,
-                    today = today,
-                    onDateSelected = {
-                        selectedDateEpoch = it.toEpochDay()
-                        feedbackBanner = null
-                        errorMessage = null
-                    }
+                ErrorBanner(
+                    message = errorMessage!!,
+                    onDismiss = { errorMessage = null }
                 )
             }
+        }
 
-            if (errorMessage != null) {
-                item {
-                    ErrorBanner(
-                        message = errorMessage!!,
-                        onDismiss = { errorMessage = null }
+        if (feedbackBanner != null) {
+            item {
+                LaTintedTile(
+                    containerColor = tints.mint.soft,
+                    shape = radii.shapeSm
+                ) {
+                    Text(
+                        text = feedbackBanner!!,
+                        style = typography.body.copy(fontWeight = FontWeight.Medium),
+                        color = colors.textPrimary
                     )
                 }
             }
+        }
 
-            if (feedbackBanner != null) {
-                item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        color = SuccessGreen.copy(alpha = 0.14f),
-                        border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = feedbackBanner!!,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-            }
+        // Automatic Daily Summary (Live Read-Only from source records)
+        item {
+            SectionHeader(
+                title = "Daily Summary",
+                actionLabel = savedReview?.status?.displayName
+            )
+        }
 
-            // Automatic Daily Summary (Live Read-Only from source records)
-            item {
-                SectionHeader(
-                    title = "Daily Summary",
-                    actionLabel = savedReview?.status?.displayName
-                )
-            }
-
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        MetricCard(
-                            label = "Tasks",
-                            value = taskSummary.completionRatioText,
-                            supportingText = if (taskSummary.hasTasks) {
-                                "${taskSummary.completedCount} of ${taskSummary.totalCount} completed"
-                            } else {
-                                "No tasks planned"
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        MetricCard(
-                            label = "Focused time",
-                            value = DateAttributionPolicy.formatDurationSeconds(completedFocusSeconds),
-                            supportingText = "${sessionsForDate.count { it.status == FocusSessionStatus.COMPLETED }} session(s)",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        MetricCard(
-                            label = "Habits",
-                            value = habitSummary.completionRatioText,
-                            supportingText = if (habitSummary.hasDueHabits) {
-                                "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due done"
-                            } else {
-                                "0 scheduled"
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        MetricCard(
-                            label = "Expenses",
-                            value = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
-                            supportingText = if (financeSummary.totalIncomeMinor > 0L) {
-                                "Income: ${MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode)}"
-                            } else {
-                                "${financeSummary.transactionCount} transaction(s)"
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Planned vs Actual Tasks Section
-            item {
-                Card(
+        // 2x2 Bento of live source metrics using module tints
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "Planned vs Actual",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (tasksForDate.isEmpty()) {
-                            Text(
-                                text = "No tasks were planned for this date.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                    LaStatTile(
+                        label = "Tasks",
+                        value = taskSummary.completionRatioText,
+                        supportingText = if (taskSummary.hasTasks) {
+                            "${taskSummary.completedCount} of ${taskSummary.totalCount} completed"
                         } else {
-                            tasksForDate.forEach { task ->
-                                val linkedFocusSeconds = sessionsForDate
-                                    .filter { it.taskId == task.id && it.status == FocusSessionStatus.COMPLETED }
-                                    .sumOf { it.focusedDurationSeconds }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                            "No tasks planned"
+                        },
+                        icon = Icons.Outlined.CheckCircleOutline,
+                        containerColor = tints.lavender.base,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaStatTile(
+                        label = "Focused time",
+                        value = DateAttributionPolicy.formatDurationSeconds(completedFocusSeconds),
+                        supportingText = "${sessionsForDate.count { it.status == FocusSessionStatus.COMPLETED }} session(s)",
+                        icon = Icons.Outlined.Timer,
+                        containerColor = tints.mint.base,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                ) {
+                    LaStatTile(
+                        label = "Habits",
+                        value = habitSummary.completionRatioText,
+                        supportingText = if (habitSummary.hasDueHabits) {
+                            "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due done"
+                        } else {
+                            "0 scheduled"
+                        },
+                        icon = Icons.Outlined.Repeat,
+                        containerColor = tints.butter.base,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaStatTile(
+                        label = "Expenses",
+                        value = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
+                        supportingText = if (financeSummary.totalIncomeMinor > 0L) {
+                            "Income: ${MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode)}"
+                        } else {
+                            "${financeSummary.transactionCount} transaction(s)"
+                        },
+                        icon = Icons.Outlined.AccountBalanceWallet,
+                        containerColor = tints.blue.base,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // Planned vs Actual Tasks Section
+        item {
+            LaContainerPanel(title = "Planned vs Actual") {
+                if (tasksForDate.isEmpty()) {
+                    Text(
+                        text = "No tasks were planned for this date.",
+                        style = typography.body,
+                        color = colors.textSecondary
+                    )
+                } else {
+                    tasksForDate.forEachIndexed { index, task ->
+                        val linkedFocusSeconds = sessionsForDate
+                            .filter { it.taskId == task.id && it.status == FocusSessionStatus.COMPLETED }
+                            .sumOf { it.focusedDurationSeconds }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = spacing.space2),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (task.isCompleted) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.success),
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = if (task.isCompleted) {
-                                            Icons.Outlined.CheckCircle
-                                        } else {
-                                            Icons.Outlined.RadioButtonUnchecked
-                                        },
-                                        contentDescription = if (task.isCompleted) "Completed" else "Planned",
-                                        tint = if (task.isCompleted) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                                        imageVector = Icons.Outlined.Check,
+                                        contentDescription = "Completed",
+                                        tint = colors.surface,
+                                        modifier = Modifier.size(13.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = task.title,
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        val plannedText = task.estimatedDurationMinutes?.let {
-                                            "Planned: ${DateAttributionPolicy.formatMinutes(it)}"
-                                        } ?: "No duration estimate"
-                                        val actualText = if (linkedFocusSeconds > 0L) {
-                                            "Linked focus: ${DateAttributionPolicy.formatDurationSeconds(linkedFocusSeconds)}"
-                                        } else {
-                                            "No focus session linked"
-                                        }
-                                        Text(
-                                            text = "$plannedText • $actualText",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.textSecondary)
+                                    )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(spacing.space3))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = task.title,
+                                    style = typography.body.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.textPrimary
+                                )
+                                val plannedText = task.estimatedDurationMinutes?.let {
+                                    "Planned: ${DateAttributionPolicy.formatMinutes(it)}"
+                                } ?: "No duration estimate"
+                                val actualText = if (linkedFocusSeconds > 0L) {
+                                    "Linked focus: ${DateAttributionPolicy.formatDurationSeconds(linkedFocusSeconds)}"
+                                } else {
+                                    "No focus session linked"
+                                }
+                                Text(
+                                    text = "$plannedText • $actualText",
+                                    style = typography.label,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+                        if (index < tasksForDate.lastIndex) {
+                            LaRowDivider()
                         }
                     }
                 }
             }
+        }
 
-            // Optional Reflection Prompts
-            item {
-                Card(
+        // Optional Reflection Prompts (Section 4.4 tint.rose for Daily Review)
+        item {
+            LaContainerPanel {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    Text(
+                        text = "Reflection (optional)",
+                        style = typography.sectionTitle,
+                        color = colors.textPrimary
+                    )
+                    if (savedReview != null) {
+                        Surface(
+                            shape = radii.shapeFull,
+                            color = tints.rose.base
+                        ) {
+                            Text(
+                                text = savedReview!!.status.displayName,
+                                style = typography.chartMicroLabel,
+                                color = colors.textPrimary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.space3))
+
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.space3)) {
+                    LaTextField(
+                        value = wentWellInput,
+                        onValueChange = {
+                            wentWellInput = it
+                            feedbackBanner = null
+                        },
+                        label = "What went well today?",
+                        placeholder = "Small wins, progress, or moments that worked...",
+                        singleLine = false,
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
+                    LaTextField(
+                        value = improveInput,
+                        onValueChange = {
+                            improveInput = it
+                            feedbackBanner = null
+                        },
+                        label = "What could be better tomorrow?",
+                        placeholder = "One adjustment or priority for tomorrow...",
+                        singleLine = false,
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
+                    LaTextField(
+                        value = rememberInput,
+                        onValueChange = {
+                            rememberInput = it
+                            feedbackBanner = null
+                        },
+                        label = "Anything worth remembering?",
+                        placeholder = "Notes, thoughts, or context from today...",
+                        singleLine = false,
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
+                    if (isFutureDate) {
+                        Text(
+                            text = "Future dates can be saved as a draft, and marked complete on or after that date.",
+                            style = typography.label,
+                            color = colors.textSecondary
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.space2)
                     ) {
+                        LaSecondaryButton(
+                            text = "Save Draft",
+                            onClick = {
+                                scope.launch {
+                                    repository.saveDailyReview(
+                                        reviewDate = selectedDate,
+                                        wentWell = wentWellInput,
+                                        improveTomorrow = improveInput,
+                                        remember = rememberInput,
+                                        status = ReviewStatus.DRAFT
+                                    ).onSuccess {
+                                        feedbackBanner = "Draft saved for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
+                                        errorMessage = null
+                                    }.onFailure { err ->
+                                        errorMessage = err.message ?: "Could not save draft."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        LaPrimaryButton(
+                            text = if (savedReview?.status == ReviewStatus.COMPLETED) "Update Review" else "Complete Review",
+                            enabled = !isFutureDate,
+                            onClick = {
+                                scope.launch {
+                                    repository.saveDailyReview(
+                                        reviewDate = selectedDate,
+                                        wentWell = wentWellInput,
+                                        improveTomorrow = improveInput,
+                                        remember = rememberInput,
+                                        status = ReviewStatus.COMPLETED
+                                    ).onSuccess {
+                                        feedbackBanner = "Daily review completed for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
+                                        errorMessage = null
+                                    }.onFailure { err ->
+                                        errorMessage = err.message ?: "Could not complete review."
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Past Reviews History
+        if (allSavedReviews.isNotEmpty()) {
+            item {
+                SectionHeader(title = "Saved Reviews (${allSavedReviews.size})")
+            }
+            item {
+                LaContainerPanel {
+                    val recentReviews = allSavedReviews.take(10)
+                    recentReviews.forEachIndexed { index, review ->
+                        val isSelected = review.reviewDate == selectedDate
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(radii.shapeSm)
+                                .background(
+                                    if (isSelected) tints.rose.soft else colors.surface
+                                )
+                                .clickable {
+                                    selectedDateEpoch = review.reviewDate.toEpochDay()
+                                    feedbackBanner = null
+                                    errorMessage = null
+                                }
+                                .padding(horizontal = spacing.space3, vertical = spacing.space2),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Reflection (optional)",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            if (savedReview != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                ) {
-                                    Text(
-                                        text = savedReview!!.status.displayName,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = DateAttributionPolicy.formatDisplayDate(review.reviewDate),
+                                    style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.textPrimary
+                                )
+                                val snippet = review.wentWell
+                                    ?: review.improveTomorrow
+                                    ?: review.remember
+                                    ?: "Summary reviewed (no written notes)"
+                                Text(
+                                    text = snippet,
+                                    style = typography.label,
+                                    color = colors.textSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(spacing.space2))
+                            Surface(
+                                shape = radii.shapeFull,
+                                color = if (review.status == ReviewStatus.COMPLETED) tints.mint.soft else tints.butter.soft
+                            ) {
+                                Text(
+                                    text = review.status.displayName,
+                                    style = typography.chartMicroLabel,
+                                    color = if (review.status == ReviewStatus.COMPLETED) colors.success else colors.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
                             }
                         }
-
-                        OutlinedTextField(
-                            value = wentWellInput,
-                            onValueChange = {
-                                wentWellInput = it
-                                feedbackBanner = null
-                            },
-                            label = { Text("What went well today?") },
-                            placeholder = { Text("Small wins, progress, or moments that worked...") },
-                            minLines = 2,
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = improveInput,
-                            onValueChange = {
-                                improveInput = it
-                                feedbackBanner = null
-                            },
-                            label = { Text("What could be better tomorrow?") },
-                            placeholder = { Text("One adjustment or priority for tomorrow...") },
-                            minLines = 2,
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        OutlinedTextField(
-                            value = rememberInput,
-                            onValueChange = {
-                                rememberInput = it
-                                feedbackBanner = null
-                            },
-                            label = { Text("Anything worth remembering?") },
-                            placeholder = { Text("Notes, thoughts, or context from today...") },
-                            minLines = 2,
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (isFutureDate) {
-                            Text(
-                                text = "Future dates can be saved as a draft, and marked complete on or after that date.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = {
-                                    scope.launch {
-                                        repository.saveDailyReview(
-                                            reviewDate = selectedDate,
-                                            wentWell = wentWellInput,
-                                            improveTomorrow = improveInput,
-                                            remember = rememberInput,
-                                            status = ReviewStatus.DRAFT
-                                        ).onSuccess {
-                                            feedbackBanner = "Draft saved for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
-                                            errorMessage = null
-                                        }.onFailure { err ->
-                                            errorMessage = err.message ?: "Could not save draft."
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Save Draft")
-                            }
-
-                            Button(
-                                onClick = {
-                                    scope.launch {
-                                        repository.saveDailyReview(
-                                            reviewDate = selectedDate,
-                                            wentWell = wentWellInput,
-                                            improveTomorrow = improveInput,
-                                            remember = rememberInput,
-                                            status = ReviewStatus.COMPLETED
-                                        ).onSuccess {
-                                            feedbackBanner = "Daily review completed for ${DateAttributionPolicy.formatShortDate(selectedDate)}."
-                                            errorMessage = null
-                                        }.onFailure { err ->
-                                            errorMessage = err.message ?: "Could not complete review."
-                                        }
-                                    }
-                                },
-                                enabled = !isFutureDate,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(if (savedReview?.status == ReviewStatus.COMPLETED) "Update Review" else "Complete Review")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Past Reviews History
-            if (allSavedReviews.isNotEmpty()) {
-                item {
-                    SectionHeader(title = "Saved Reviews (${allSavedReviews.size})")
-                }
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        allSavedReviews.take(10).forEach { review ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        selectedDateEpoch = review.reviewDate.toEpochDay()
-                                        feedbackBanner = null
-                                        errorMessage = null
-                                    },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (review.reviewDate == selectedDate) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surface
-                                    }
-                                ),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = DateAttributionPolicy.formatDisplayDate(review.reviewDate),
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        val snippet = review.wentWell
-                                            ?: review.improveTomorrow
-                                            ?: review.remember
-                                            ?: "Summary reviewed (no written notes)"
-                                        Text(
-                                            text = snippet,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = review.status.displayName,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (review.status == ReviewStatus.COMPLETED) {
-                                            SuccessGreen
-                                        } else {
-                                            MaterialTheme.colorScheme.primary
-                                        }
-                                    )
-                                }
-                            }
+                        if (index < recentReviews.lastIndex) {
+                            LaRowDivider()
                         }
                     }
                 }

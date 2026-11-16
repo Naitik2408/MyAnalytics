@@ -1,8 +1,9 @@
 package com.lifeanalytics.app.feature.finance
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -16,42 +17,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,8 +46,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.common.MoneyUtils
 import com.lifeanalytics.app.core.common.SupportedCurrency
@@ -68,9 +57,25 @@ import com.lifeanalytics.app.core.designsystem.ConfirmDeleteDialog
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
 import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
-import com.lifeanalytics.app.core.designsystem.MetricCard
-import com.lifeanalytics.app.core.designsystem.SectionHeader
-import com.lifeanalytics.app.core.designsystem.SuccessGreen
+import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaDateRangePill
+import com.lifeanalytics.app.core.designsystem.LaFilterChip
+import com.lifeanalytics.app.core.designsystem.LaHeroPanel
+import com.lifeanalytics.app.core.designsystem.LaPillBarChart
+import com.lifeanalytics.app.core.designsystem.LaPillBarEntry
+import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRingChart
+import com.lifeanalytics.app.core.designsystem.LaRingSlice
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaSegmentedControl
+import com.lifeanalytics.app.core.designsystem.LaStatTile
+import com.lifeanalytics.app.core.designsystem.LaTextButton
+import com.lifeanalytics.app.core.designsystem.LaTextField
+import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.DefaultFinanceCategories
@@ -83,18 +88,17 @@ import java.time.YearMonth
 import java.time.ZoneOffset
 import kotlinx.coroutines.launch
 
-private enum class FinancePeriodScope {
-    MONTH,
-    DAY
+private enum class FinancePeriodScope(val label: String) {
+    MONTH("Monthly"),
+    DAY("Daily")
 }
 
-private enum class TransactionFilter {
-    ALL,
-    EXPENSE,
-    INCOME
+private enum class TransactionFilter(val label: String) {
+    ALL("All"),
+    EXPENSE("Expense"),
+    INCOME("Income")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinanceScreen(
     repository: LifeAnalyticsRepository,
@@ -105,10 +109,11 @@ fun FinanceScreen(
     var periodScope by rememberSaveable {
         mutableStateOf(if (initialDayFilter != null) FinancePeriodScope.DAY else FinancePeriodScope.MONTH)
     }
-    var selectedYear by rememberSaveable { mutableStateOf((initialDayFilter ?: today).year) }
-    var selectedMonth by rememberSaveable { mutableStateOf((initialDayFilter ?: today).monthValue) }
+    var selectedYear by rememberSaveable { mutableIntStateOf((initialDayFilter ?: today).year) }
+    var selectedMonth by rememberSaveable { mutableIntStateOf((initialDayFilter ?: today).monthValue) }
     var selectedDayEpoch by rememberSaveable { mutableStateOf((initialDayFilter ?: today).toEpochDay()) }
     var typeFilter by rememberSaveable { mutableStateOf(TransactionFilter.ALL) }
+    var selectedTrendBarIndex by rememberSaveable { mutableIntStateOf(0) }
 
     val selectedYearMonth = YearMonth.of(selectedYear, selectedMonth)
     val selectedDay = LocalDate.ofEpochDay(selectedDayEpoch)
@@ -140,67 +145,139 @@ fun FinanceScreen(
         }
     }
 
+    // Build spending trend pill bar buckets from real source transactions
+    val spendingTrendEntries = remember(periodScope, rangeStart, rangeEnd, transactionsInPeriod, currencyCode) {
+        if (periodScope == FinancePeriodScope.MONTH) {
+            val buckets = mutableListOf<LaPillBarEntry>()
+            var cursor = rangeStart
+            var weekNum = 1
+            while (!cursor.isAfter(rangeEnd)) {
+                val chunkEnd = cursor.plusDays(6).let { if (it.isAfter(rangeEnd)) rangeEnd else it }
+                val expenseMinor = transactionsInPeriod
+                    .filter {
+                        it.type == TransactionType.EXPENSE &&
+                            !it.transactionDate.isBefore(cursor) &&
+                            !it.transactionDate.isAfter(chunkEnd)
+                    }
+                    .sumOf { it.amountMinor }
+                buckets.add(
+                    LaPillBarEntry(
+                        label = "Wk $weekNum",
+                        value = expenseMinor / 100f,
+                        valueLabel = MoneyUtils.formatMinorUnits(expenseMinor, currencyCode)
+                    )
+                )
+                cursor = chunkEnd.plusDays(1)
+                weekNum++
+            }
+            buckets
+        } else {
+            val expenseMinor = summary.totalExpenseMinor
+            val incomeMinor = summary.totalIncomeMinor
+            listOf(
+                LaPillBarEntry(
+                    label = "Income",
+                    value = incomeMinor / 100f,
+                    valueLabel = MoneyUtils.formatMinorUnits(incomeMinor, currencyCode)
+                ),
+                LaPillBarEntry(
+                    label = "Expense",
+                    value = expenseMinor / 100f,
+                    valueLabel = MoneyUtils.formatMinorUnits(expenseMinor, currencyCode)
+                )
+            )
+        }
+    }
+
+    // Build category breakdown ring slices
+    val categoryRingSlices = remember(summary, currencyCode) {
+        if (summary.totalExpenseMinor <= 0L) {
+            emptyList()
+        } else {
+            summary.expensesByCategoryMinor.entries.take(5).map { (cat, minor) ->
+                val pct = ((minor * 100.0) / summary.totalExpenseMinor).toInt().coerceAtLeast(1)
+                LaRingSlice(
+                    label = cat,
+                    amountValue = minor.toFloat(),
+                    formattedValue = MoneyUtils.formatMinorUnits(minor, currencyCode),
+                    percentage = pct
+                )
+            }
+        }
+    }
+
     val scope = rememberCoroutineScope()
     var showAddDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<FinanceTransaction?>(null) }
     var transactionToDelete by remember { mutableStateOf<FinanceTransaction?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Finance") },
-                actions = {
-                    TextButton(onClick = { showAddDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Transaction", fontWeight = FontWeight.SemiBold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = periodScope == FinancePeriodScope.MONTH,
-                        onClick = { periodScope = FinancePeriodScope.MONTH },
-                        label = { Text("Monthly view") }
-                    )
-                    FilterChip(
-                        selected = periodScope == FinancePeriodScope.DAY,
-                        onClick = { periodScope = FinancePeriodScope.DAY },
-                        label = { Text("Daily view") }
-                    )
-                }
-            }
+    val colors = LaTheme.colors
+    val spacing = LaTheme.spacing
 
-            item {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space2,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space4)
+    ) {
+        // 1. Header with Screen Title & Single Primary Ink "Add" Button
+        item {
+            LaScreenHeader(
+                title = "Finance",
+                subtitle = "Income, expenses, and cash flow"
+            ) {
+                LaPrimaryButton(
+                    text = "Add entry",
+                    icon = Icons.Outlined.Add,
+                    onClick = { showAddDialog = true }
+                )
+            }
+        }
+
+        // Compact Segmented Monthly/Daily Control + Compact Month/Date Pill Control
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LaSegmentedControl(
+                    options = FinancePeriodScope.entries,
+                    selectedOption = periodScope,
+                    onOptionSelected = {
+                        periodScope = it
+                        selectedTrendBarIndex = 0
+                    },
+                    labelProvider = { it.label },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 if (periodScope == FinancePeriodScope.MONTH) {
-                    MonthSelectorBar(
-                        yearMonth = selectedYearMonth,
-                        currentYearMonth = YearMonth.from(today),
-                        onMonthChanged = { ym ->
-                            selectedYear = ym.year
-                            selectedMonth = ym.monthValue
-                        }
+                    val currentYm = YearMonth.from(today)
+                    val isCurrentMonth = selectedYearMonth == currentYm
+                    LaDateRangePill(
+                        title = DateAttributionPolicy.formatMonthYear(selectedYearMonth),
+                        badgeText = if (isCurrentMonth) "This month" else "Selected month",
+                        onPrevious = {
+                            val prev = selectedYearMonth.minusMonths(1)
+                            selectedYear = prev.year
+                            selectedMonth = prev.monthValue
+                        },
+                        onNext = {
+                            val next = selectedYearMonth.plusMonths(1)
+                            selectedYear = next.year
+                            selectedMonth = next.monthValue
+                        },
+                        onResetToCurrent = if (!isCurrentMonth) {
+                            {
+                                selectedYear = currentYm.year
+                                selectedMonth = currentYm.monthValue
+                            }
+                        } else null,
+                        resetLabel = "This month"
                     )
                 } else {
                     DateSelectorBar(
@@ -214,118 +291,159 @@ fun FinanceScreen(
                     )
                 }
             }
+        }
 
-            if (errorMessage != null) {
-                item {
-                    ErrorBanner(
-                        message = errorMessage!!,
-                        onDismiss = { errorMessage = null }
-                    )
-                }
-            }
-
+        if (errorMessage != null) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        label = "Total Income",
-                        value = MoneyUtils.formatMinorUnits(summary.totalIncomeMinor, currencyCode),
-                        supportingText = "Recorded inflows",
-                        valueColor = SuccessGreen,
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        label = "Total Expenses",
-                        value = MoneyUtils.formatMinorUnits(summary.totalExpenseMinor, currencyCode),
-                        supportingText = "Recorded outflows",
-                        valueColor = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item {
-                val netColor = when {
-                    summary.netForPeriodMinor > 0L -> SuccessGreen
-                    summary.netForPeriodMinor < 0L -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-                MetricCard(
-                    label = "Net for this period",
-                    value = MoneyUtils.formatSignedNetMinorUnits(summary.netForPeriodMinor, currencyCode),
-                    supportingText = "Income minus expenses in selected period (not account balance)",
-                    valueColor = netColor,
-                    modifier = Modifier.fillMaxWidth()
+                ErrorBanner(
+                    message = errorMessage!!,
+                    onDismiss = { errorMessage = null }
                 )
             }
+        }
 
-            if (summary.expensesByCategoryMinor.isNotEmpty() && summary.totalExpenseMinor > 0L) {
-                item {
-                    ExpenseCategoryBreakdownCard(
-                        expensesByCategoryMinor = summary.expensesByCategoryMinor,
-                        totalExpenseMinor = summary.totalExpenseMinor,
-                        currencyCode = currencyCode
+        // 2. Tinted Blue Hero Panel for Net Amount + Paired Income & Expense Bento Tiles
+        item {
+            val netSignText = when {
+                summary.netForPeriodMinor > 0L -> "Positive net inflow"
+                summary.netForPeriodMinor < 0L -> "Net outflow"
+                else -> "Balanced ($0 net)"
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
+                LaHeroPanel(
+                    title = "Net for this period",
+                    subtitle = "$netSignText • Income minus expenses (not account balance)",
+                    icon = Icons.Outlined.AccountBalanceWallet,
+                    containerColor = colors.tints.blue.strong
+                ) {
+                    Text(
+                        text = MoneyUtils.formatSignedNetMinorUnits(summary.netForPeriodMinor, currencyCode),
+                        style = LaTheme.typography.timerValue,
+                        color = colors.textPrimary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                ) {
+                    LaStatTile(
+                        label = "Total Income",
+                        value = MoneyUtils.formatMinorUnits(summary.totalIncomeMinor, currencyCode),
+                        icon = Icons.Outlined.ArrowDownward,
+                        supportingText = "Recorded inflows (+)",
+                        containerColor = colors.tints.mint.base,
+                        valueColor = colors.income,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaStatTile(
+                        label = "Total Expenses",
+                        value = MoneyUtils.formatMinorUnits(summary.totalExpenseMinor, currencyCode),
+                        icon = Icons.Outlined.ArrowUpward,
+                        supportingText = "Recorded outflows (-)",
+                        containerColor = colors.tints.rose.base,
+                        valueColor = colors.expense,
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
+        }
 
-            item {
+        // 3. Spending Trend Pill Bars & Category Ring (Ghost states when empty)
+        item {
+            LaContainerPanel(
+                title = if (periodScope == FinancePeriodScope.MONTH) {
+                    "Spending trend by week"
+                } else {
+                    "Daily inflow vs outflow"
+                },
+                subtitle = if (summary.totalExpenseMinor > 0L) {
+                    "Total expenses: ${MoneyUtils.formatMinorUnits(summary.totalExpenseMinor, currencyCode)}"
+                } else {
+                    "Zero expenses recorded in this period"
+                }
+            ) {
+                LaPillBarChart(
+                    entries = spendingTrendEntries,
+                    selectedIndex = selectedTrendBarIndex.coerceIn(
+                        0,
+                        (spendingTrendEntries.size - 1).coerceAtLeast(0)
+                    ),
+                    onSelectIndex = { selectedTrendBarIndex = it },
+                    barTint = colors.tints.blue,
+                    chartHeight = 132.dp,
+                    emptyMessage = "No spending recorded in this period yet",
+                    accessibilitySummary = "Finance spending trend chart for selected period."
+                )
+            }
+        }
+
+        item {
+            LaContainerPanel(
+                title = "Expenses by category",
+                subtitle = if (categoryRingSlices.isNotEmpty()) {
+                    "Top categories by share of spending"
+                } else {
+                    "Category breakdown appears once expenses are recorded"
+                }
+            ) {
+                LaRingChart(
+                    slices = categoryRingSlices,
+                    emptyMessage = "No expense categories recorded in this period yet.",
+                    accessibilitySummary = "Category breakdown ring chart for expenses."
+                )
+            }
+        }
+
+        // 4. Transactions Container: Title on its own row, Filter Chips below it (No word breaking!)
+        item {
+            LaContainerPanel(
+                title = "Transactions (${filteredTransactions.size})",
+                subtitle = "Newest first"
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SectionHeader(
-                        title = "Transactions (${filteredTransactions.size})",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = typeFilter == TransactionFilter.ALL,
-                            onClick = { typeFilter = TransactionFilter.ALL },
-                            label = { Text("All") }
-                        )
-                        FilterChip(
-                            selected = typeFilter == TransactionFilter.EXPENSE,
-                            onClick = { typeFilter = TransactionFilter.EXPENSE },
-                            label = { Text("Expense") }
-                        )
-                        FilterChip(
-                            selected = typeFilter == TransactionFilter.INCOME,
-                            onClick = { typeFilter = TransactionFilter.INCOME },
-                            label = { Text("Income") }
+                    TransactionFilter.entries.forEach { filter ->
+                        LaFilterChip(
+                            label = filter.label,
+                            selected = typeFilter == filter,
+                            onClick = { typeFilter = filter },
+                            selectedColor = colors.tints.blue.strong
                         )
                     }
                 }
-            }
 
-            if (transactionsInPeriod.isEmpty()) {
-                item {
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (transactionsInPeriod.isEmpty()) {
                     EmptyStateCard(
                         title = "No transactions in this period",
-                        message = "Record an expense or income entry to track your cash flow for this period.",
-                        actionLabel = "Add Transaction",
-                        onActionClick = { showAddDialog = true }
+                        message = "Use the Add entry button at the top to record an expense or income.",
+                        tintSoftColor = colors.tints.blue.soft
                     )
-                }
-            } else if (filteredTransactions.isEmpty()) {
-                item {
+                } else if (filteredTransactions.isEmpty()) {
                     EmptyStateCard(
                         title = "No matching transactions",
-                        message = "No ${typeFilter.name.lowercase()} transactions found in this period.",
-                        actionLabel = "Show All",
-                        onActionClick = { typeFilter = TransactionFilter.ALL }
+                        message = "No ${typeFilter.label.lowercase()} entries found in this period.",
+                        actionLabel = "Show all",
+                        onActionClick = { typeFilter = TransactionFilter.ALL },
+                        tintSoftColor = colors.tints.blue.soft
                     )
-                }
-            } else {
-                items(filteredTransactions, key = { it.id }) { tx ->
-                    TransactionRow(
-                        transaction = tx,
-                        onEdit = { transactionToEdit = tx },
-                        onDelete = { transactionToDelete = tx }
-                    )
+                } else {
+                    filteredTransactions.forEachIndexed { idx, tx ->
+                        TransactionListRow(
+                            transaction = tx,
+                            onEdit = { transactionToEdit = tx },
+                            onDelete = { transactionToDelete = tx }
+                        )
+                        if (idx < filteredTransactions.lastIndex) {
+                            LaRowDivider()
+                        }
+                    }
                 }
             }
         }
@@ -391,7 +509,7 @@ fun FinanceScreen(
         val deleting = transactionToDelete!!
         ConfirmDeleteDialog(
             title = "Delete transaction?",
-            message = "Delete this ${deleting.type.displayName.lowercase()} of ${MoneyUtils.formatMinorUnits(deleting.amountMinor, deleting.currencyCode)} (${deleting.category})? Totals for this period will update immediately.",
+            message = "Delete this ${deleting.type.displayName.lowercase()} of ${MoneyUtils.formatMinorUnits(deleting.amountMinor, deleting.currencyCode)} (${deleting.category})? Period totals will update immediately.",
             onConfirm = {
                 scope.launch {
                     repository.deleteTransaction(deleting.id)
@@ -404,210 +522,101 @@ fun FinanceScreen(
 }
 
 @Composable
-private fun MonthSelectorBar(
-    yearMonth: YearMonth,
-    currentYearMonth: YearMonth,
-    onMonthChanged: (YearMonth) -> Unit
-) {
-    val isCurrentMonth = yearMonth == currentYearMonth
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = { onMonthChanged(yearMonth.minusMonths(1)) }) {
-                Icon(
-                    imageVector = Icons.Outlined.ChevronLeft,
-                    contentDescription = "Previous month"
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = DateAttributionPolicy.formatMonthYear(yearMonth),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (isCurrentMonth) "Current month" else "Selected month",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isCurrentMonth) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!isCurrentMonth) {
-                    TextButton(onClick = { onMonthChanged(currentYearMonth) }) {
-                        Text("This month")
-                    }
-                }
-                IconButton(onClick = { onMonthChanged(yearMonth.plusMonths(1)) }) {
-                    Icon(
-                        imageVector = Icons.Outlined.ChevronRight,
-                        contentDescription = "Next month"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExpenseCategoryBreakdownCard(
-    expensesByCategoryMinor: Map<String, Long>,
-    totalExpenseMinor: Long,
-    currencyCode: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = "Expenses by category",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            expensesByCategoryMinor.entries.forEach { (category, amountMinor) ->
-                val share = (amountMinor.toFloat() / totalExpenseMinor.toFloat()).coerceIn(0f, 1f)
-                val pct = (share * 100f).toInt()
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "$category ($pct%)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = MoneyUtils.formatMinorUnits(amountMinor, currencyCode),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { share },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TransactionRow(
+private fun TransactionListRow(
     transaction: FinanceTransaction,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val colors = LaTheme.colors
     val isIncome = transaction.type == TransactionType.INCOME
-    val amountColor = if (isIncome) SuccessGreen else MaterialTheme.colorScheme.error
+    val semanticColor = if (isIncome) colors.income else colors.expense
+    val chipBg = if (isIncome) colors.tints.mint.base else colors.tints.rose.base
     val signPrefix = if (isIncome) "+" else "-"
     val typeLabel = if (isIncome) "Income" else "Expense"
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            .pressScaleClickable(onClick = onEdit)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(chipBg),
+            contentAlignment = Alignment.Center
         ) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = amountColor.copy(alpha = 0.12f),
-                modifier = Modifier.size(38.dp)
+            Icon(
+                imageVector = if (isIncome) Icons.Outlined.ArrowDownward else Icons.Outlined.ArrowUpward,
+                contentDescription = typeLabel,
+                tint = semanticColor,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = if (isIncome) Icons.Outlined.ArrowDownward else Icons.Outlined.ArrowUpward,
-                    contentDescription = typeLabel,
-                    tint = amountColor,
-                    modifier = Modifier.padding(8.dp)
+                Text(
+                    text = transaction.category,
+                    style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Box(
+                    modifier = Modifier
+                        .clip(LaTheme.radii.shapeFull)
+                        .background(colors.surfaceVariant)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = transaction.category,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = typeLabel,
+                        style = LaTheme.typography.chartMicroLabel,
+                        color = colors.textSecondary
                     )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            text = typeLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                val dateStr = DateAttributionPolicy.formatShortDate(transaction.transactionDate)
-                val subtitle = if (!transaction.note.isNullOrBlank()) {
-                    "$dateStr • ${transaction.note}"
-                } else {
-                    dateStr
-                }
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.height(2.dp))
+            val dateStr = DateAttributionPolicy.formatShortDate(transaction.transactionDate)
+            val subtitle = if (!transaction.note.isNullOrBlank()) {
+                "$dateStr • ${transaction.note}"
+            } else {
+                dateStr
+            }
             Text(
-                text = "$signPrefix${MoneyUtils.formatMinorUnits(transaction.amountMinor, transaction.currencyCode)}",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = amountColor
+                text = subtitle,
+                style = LaTheme.typography.label,
+                color = colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Edit transaction",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = "Delete transaction",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "$signPrefix${MoneyUtils.formatMinorUnits(transaction.amountMinor, transaction.currencyCode)}",
+            style = LaTheme.typography.sectionTitle.copy(fontWeight = FontWeight.Bold),
+            color = semanticColor
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        LaCircularIconButton(
+            icon = Icons.Outlined.Edit,
+            contentDescription = "Edit transaction",
+            onClick = onEdit,
+            size = 44.dp
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        LaCircularIconButton(
+            icon = Icons.Outlined.DeleteOutline,
+            contentDescription = "Delete transaction",
+            onClick = onDelete,
+            contentColor = colors.error,
+            size = 44.dp
+        )
     }
 }
 
@@ -655,69 +664,73 @@ fun TransactionFormDialog(
 
     val selectedDate = LocalDate.ofEpochDay(selectedDateEpoch)
     val currencySymbol = SupportedCurrency.fromCode(currencyCode).symbol
+    val colors = LaTheme.colors
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = LaTheme.radii.shapeMd,
+        containerColor = colors.surface,
         title = {
-            Text(if (initialTransaction == null) "Add Transaction" else "Edit Transaction")
+            Text(
+                text = if (initialTransaction == null) "Add transaction" else "Edit transaction",
+                style = LaTheme.typography.sectionTitle,
+                color = colors.textPrimary
+            )
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (validationError != null) {
                     Text(
                         text = validationError!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
+                        style = LaTheme.typography.label,
+                        color = colors.error
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TransactionType.entries.forEach { type ->
-                        FilterChip(
-                            selected = selectedType == type,
-                            onClick = {
-                                selectedType = type
-                                validationError = null
-                            },
-                            label = { Text(type.displayName) }
-                        )
-                    }
-                }
+                LaSegmentedControl(
+                    options = TransactionType.entries,
+                    selectedOption = selectedType,
+                    onOptionSelected = {
+                        selectedType = it
+                        validationError = null
+                    },
+                    labelProvider = { it.displayName },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                OutlinedTextField(
+                LaTextField(
                     value = amountInput,
                     onValueChange = {
                         amountInput = it
                         validationError = null
                     },
-                    label = { Text("Amount ($currencySymbol) *") },
-                    placeholder = { Text("e.g., 250 or 49.50") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Amount ($currencySymbol) *",
+                    placeholder = "e.g. 250 or 49.50",
+                    isError = validationError != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
 
                 Text(
                     text = "Category *",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = LaTheme.typography.label,
+                    color = colors.textSecondary
                 )
 
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     categoriesForType.forEach { category ->
-                        FilterChip(
+                        LaFilterChip(
+                            label = category,
                             selected = selectedCategory.equals(category, ignoreCase = true),
                             onClick = {
                                 selectedCategory = category
                                 validationError = null
-                            },
-                            label = { Text(category) }
+                            }
                         )
                     }
                 }
@@ -729,48 +742,43 @@ fun TransactionFormDialog(
                 ) {
                     Text(
                         text = "Date: ${DateAttributionPolicy.formatShortDate(selectedDate)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = LaTheme.typography.body,
+                        color = colors.textPrimary
                     )
-                    TextButton(onClick = { showDatePicker = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.CalendarMonth,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Change")
-                    }
+                    LaSecondaryButton(
+                        text = "Change",
+                        icon = Icons.Outlined.CalendarMonth,
+                        onClick = { showDatePicker = true }
+                    )
                 }
 
-                OutlinedTextField(
+                LaTextField(
                     value = noteInput,
                     onValueChange = {
                         noteInput = it
                         validationError = null
                     },
-                    label = { Text("Note (optional)") },
-                    placeholder = { Text("Short description") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Note (optional)",
+                    placeholder = "Short description"
                 )
             }
         },
         confirmButton = {
-            Button(
+            LaPrimaryButton(
+                text = "Save",
                 onClick = {
                     val amountMinor = MoneyUtils.parseToMinorUnitsOrNull(amountInput)
                     if (amountMinor == null) {
                         validationError = "Enter a valid positive amount (up to 2 decimal places)."
-                        return@Button
+                        return@LaPrimaryButton
                     }
                     if (!DefaultFinanceCategories.isValidCategory(selectedType, selectedCategory)) {
                         validationError = "Select a category."
-                        return@Button
+                        return@LaPrimaryButton
                     }
                     if (noteInput.trim().length > 300) {
                         validationError = "Note must be 300 characters or fewer."
-                        return@Button
+                        return@LaPrimaryButton
                     }
                     onSave(
                         selectedType,
@@ -780,14 +788,13 @@ fun TransactionFormDialog(
                         noteInput.trim().takeIf { it.isNotEmpty() }
                     )
                 }
-            ) {
-                Text("Save")
-            }
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            LaSecondaryButton(
+                text = "Cancel",
+                onClick = onDismiss
+            )
         }
     )
 
@@ -797,7 +804,8 @@ fun TransactionFormDialog(
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(
+                LaTextButton(
+                    text = "Select",
                     onClick = {
                         pickerState.selectedDateMillis?.let { millis ->
                             val picked = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
@@ -805,14 +813,14 @@ fun TransactionFormDialog(
                         }
                         showDatePicker = false
                     }
-                ) {
-                    Text("Select")
-                }
+                )
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Cancel")
-                }
+                LaTextButton(
+                    text = "Cancel",
+                    color = colors.textSecondary,
+                    onClick = { showDatePicker = false }
+                )
             }
         ) {
             DatePicker(state = pickerState)

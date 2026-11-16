@@ -1,22 +1,21 @@
 package com.lifeanalytics.app.app
 
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -24,6 +23,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.lifeanalytics.app.core.designsystem.LaDockItem
+import com.lifeanalytics.app.core.designsystem.LaFloatingDock
+import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.data.repository.PreferencesRepository
@@ -56,6 +58,7 @@ fun LifeAnalyticsApp(
     preferencesRepository: PreferencesRepository,
     preferences: AppPreferences
 ) {
+    val colors = LaTheme.colors
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: PrimaryDestination.HOME.route
@@ -68,46 +71,24 @@ fun LifeAnalyticsApp(
     var preselectedFocusTaskId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val primaryRoutes = remember { PrimaryDestination.entries.map { it.route }.toSet() }
-    val showBottomBar = currentRoute in primaryRoutes
-
-    Scaffold(
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    PrimaryDestination.entries.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.route,
-                            onClick = {
-                                if (destination == PrimaryDestination.FINANCE) {
-                                    financeDayFilterEpoch = null
-                                }
-                                if (currentRoute != destination.route) {
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = destination.icon,
-                                    contentDescription = destination.label
-                                )
-                            },
-                            label = { Text(destination.label) }
-                        )
-                    }
-                }
-            }
+    val showBottomDock = currentRoute in primaryRoutes
+    val dockItems = remember {
+        PrimaryDestination.entries.map {
+            LaDockItem(route = it.route, label = it.label, icon = it.icon)
         }
-    ) { innerPadding ->
+    }
+
+    // Window insets applied once at root shell (Section 7.1)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas)
+            .statusBarsPadding()
+    ) {
         NavHost(
             navController = navController,
             startDestination = PrimaryDestination.HOME.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.fillMaxSize()
         ) {
             composable(PrimaryDestination.HOME.route) {
                 HomeDashboardScreen(
@@ -230,6 +211,28 @@ fun LifeAnalyticsApp(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
+        }
+
+        if (showBottomDock) {
+            LaFloatingDock(
+                items = dockItems,
+                currentRoute = currentRoute,
+                onItemSelected = { item ->
+                    if (item.route == PrimaryDestination.FINANCE.route) {
+                        financeDayFilterEpoch = null
+                    }
+                    if (currentRoute != item.route) {
+                        navController.navigate(item.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
         }
     }
 }

@@ -1,46 +1,32 @@
 package com.lifeanalytics.app.feature.planning
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,7 +48,18 @@ import com.lifeanalytics.app.core.designsystem.ConfirmDeleteDialog
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
 import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
-import com.lifeanalytics.app.core.designsystem.LocalExtendedColors
+import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
+import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaFilterChip
+import com.lifeanalytics.app.core.designsystem.LaHeroPanel
+import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
+import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaTextField
+import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.SectionHeader
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
@@ -73,12 +70,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.coroutines.launch
 
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyPlanningScreen(
     repository: LifeAnalyticsRepository,
@@ -90,7 +81,12 @@ fun DailyPlanningScreen(
     onConsumedInitialAddDialog: () -> Unit = {},
     onNavigateBack: (() -> Unit)? = null
 ) {
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
     val scope = rememberCoroutineScope()
+
     val tasks by repository.observeTasksForDate(selectedDate)
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val summary = remember(tasks) { DomainCalculations.calculateTaskSummary(tasks) }
@@ -119,237 +115,207 @@ fun DailyPlanningScreen(
     val incompleteTasks = remember(filteredTasks) { filteredTasks.filter { !it.isCompleted } }
     val completedTasks = remember(filteredTasks) { filteredTasks.filter { it.isCompleted } }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Daily Planning") },
-                navigationIcon = {
-                    if (onNavigateBack != null) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back"
-                            )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space3,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space3)
+    ) {
+        item {
+            LaScreenHeader(
+                title = "Daily Planning",
+                subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
+                onNavigateBack = onNavigateBack,
+                trailingContent = {
+                    LaPrimaryButton(
+                        text = "Add task",
+                        icon = Icons.Outlined.Add,
+                        onClick = {
+                            editingTask = null
+                            showTaskDialog = true
                         }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+                    )
+                }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    editingTask = null
-                    showTaskDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+        }
+
+        item {
+            DateSelectorBar(
+                selectedDate = selectedDate,
+                today = today,
+                onDateSelected = onDateChange
+            )
+        }
+
+        if (errorMessage != null) {
+            item {
+                ErrorBanner(
+                    message = errorMessage!!,
+                    onDismiss = { errorMessage = null }
+                )
+            }
+        }
+
+        // Lavender Hero Panel for Daily Task Progress
+        item {
+            val plannedTimeText = summary.totalEstimatedMinutes?.let {
+                "Planned time (estimated): ${DateAttributionPolicy.formatSummaryMinutes(it)}"
+            } ?: "Planned time: No time estimates"
+
+            LaHeroPanel(
+                title = "Your progress",
+                subtitle = plannedTimeText,
+                icon = Icons.Outlined.CheckCircleOutline,
+                containerColor = tints.lavender.strong
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Outlined.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Add task", fontWeight = FontWeight.SemiBold)
+                if (!summary.hasTasks) {
+                    Text(
+                        text = "No tasks planned",
+                        style = typography.metricEmptyValue,
+                        color = colors.textPrimary
+                    )
+                } else {
+                    Text(
+                        text = "${summary.completedCount} / ${summary.totalCount}",
+                        style = typography.metricValue,
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(spacing.space2))
+                    LaHorizontalTrackBar(
+                        label = "${summary.completedCount} of ${summary.totalCount} tasks completed",
+                        valueText = "${((summary.completedCount * 100) / summary.totalCount)}%",
+                        progress = summary.completedCount.toFloat() / summary.totalCount.toFloat(),
+                        tint = tints.lavender,
+                        useInkFill = true
+                    )
                 }
             }
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Spacer(modifier = Modifier.height(4.dp))
-                DateSelectorBar(
-                    selectedDate = selectedDate,
-                    today = today,
-                    onDateSelected = onDateChange
+
+        // Category Filter Row
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+            ) {
+                LaFilterChip(
+                    label = "All",
+                    selected = selectedCategoryFilter == null,
+                    onClick = { selectedCategoryFilter = null }
                 )
-            }
-
-            if (errorMessage != null) {
-                item {
-                    ErrorBanner(
-                        message = errorMessage!!,
-                        onDismiss = { errorMessage = null }
-                    )
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "Your progress",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        if (!summary.hasTasks) {
-                            Text(
-                                text = "No tasks planned",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Planned time: No time estimates",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        } else {
-                            Text(
-                                text = "${summary.completedCount} of ${summary.totalCount} tasks completed",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = {
-                                    summary.completedCount.toFloat() / summary.totalCount.toFloat()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            val plannedTimeText = summary.totalEstimatedMinutes?.let {
-                                "Planned time (estimated): ${DateAttributionPolicy.formatSummaryMinutes(it)}"
-                            } ?: "Planned time: No time estimates"
-                            Text(
-                                text = plannedTimeText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                TaskCategory.entries.forEach { category ->
+                    LaFilterChip(
+                        label = category.displayName,
+                        selected = selectedCategoryFilter == category,
+                        onClick = {
+                            selectedCategoryFilter = if (selectedCategoryFilter == category) null else category
                         }
-                    }
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = selectedCategoryFilter == null,
-                        onClick = { selectedCategoryFilter = null },
-                        label = { Text("All") }
                     )
-                    TaskCategory.entries.forEach { category ->
-                        FilterChip(
-                            selected = selectedCategoryFilter == category,
-                            onClick = {
-                                selectedCategoryFilter = if (selectedCategoryFilter == category) null else category
-                            },
-                            label = { Text(category.displayName) }
-                        )
-                    }
                 }
             }
+        }
 
+        item {
+            SectionHeader(
+                title = "Tasks",
+                actionLabel = "+ Add task",
+                onActionClick = {
+                    editingTask = null
+                    showTaskDialog = true
+                }
+            )
+        }
+
+        if (tasks.isEmpty()) {
             item {
-                SectionHeader(
-                    title = "Tasks",
-                    actionLabel = "+ Add task",
+                EmptyStateCard(
+                    title = "No tasks planned for this day",
+                    message = "Add the tasks you intend to work on. Planned time and duration estimates are optional.",
+                    actionLabel = "Add task",
                     onActionClick = {
                         editingTask = null
                         showTaskDialog = true
                     }
                 )
             }
-
-            if (tasks.isEmpty()) {
+        } else if (filteredTasks.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = "No tasks in this category",
+                    message = "No tasks match the selected category filter on this date.",
+                    actionLabel = "Clear filter",
+                    onActionClick = { selectedCategoryFilter = null }
+                )
+            }
+        } else {
+            if (incompleteTasks.isNotEmpty()) {
                 item {
-                    EmptyStateCard(
-                        title = "No tasks planned for this day",
-                        message = "Add the tasks you intend to work on. Planned time and duration estimates are optional.",
-                        actionLabel = "Add task",
-                        onActionClick = {
-                            editingTask = null
-                            showTaskDialog = true
-                        }
-                    )
-                }
-            } else if (filteredTasks.isEmpty()) {
-                item {
-                    EmptyStateCard(
-                        title = "No tasks in this category",
-                        message = "No tasks match the selected category filter on this date.",
-                        actionLabel = "Clear filter",
-                        onActionClick = { selectedCategoryFilter = null }
-                    )
-                }
-            } else {
-                items(incompleteTasks, key = { it.id }) { task ->
-                    TaskRowCard(
-                        task = task,
-                        onToggleComplete = {
-                            scope.launch {
-                                repository.setTaskCompleted(task.id, !task.isCompleted)
-                                    .onFailure { errorMessage = it.message }
+                    LaContainerPanel {
+                        incompleteTasks.forEachIndexed { index, task ->
+                            TaskRowItem(
+                                task = task,
+                                onToggleComplete = {
+                                    scope.launch {
+                                        repository.setTaskCompleted(task.id, !task.isCompleted)
+                                            .onFailure { errorMessage = it.message }
+                                    }
+                                },
+                                onEdit = {
+                                    editingTask = task
+                                    showTaskDialog = true
+                                },
+                                onDelete = { taskPendingDelete = task },
+                                onStartFocus = { onStartFocusForTask(task) }
+                            )
+                            if (index < incompleteTasks.lastIndex) {
+                                LaRowDivider()
                             }
-                        },
-                        onEdit = {
-                            editingTask = task
-                            showTaskDialog = true
-                        },
-                        onDelete = { taskPendingDelete = task },
-                        onStartFocus = { onStartFocusForTask(task) }
-                    )
-                }
-
-                if (completedTasks.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Completed (${completedTasks.size})",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    items(completedTasks, key = { it.id }) { task ->
-                        TaskRowCard(
-                            task = task,
-                            onToggleComplete = {
-                                scope.launch {
-                                    repository.setTaskCompleted(task.id, !task.isCompleted)
-                                        .onFailure { errorMessage = it.message }
-                                }
-                            },
-                            onEdit = {
-                                editingTask = task
-                                showTaskDialog = true
-                            },
-                            onDelete = { taskPendingDelete = task },
-                            onStartFocus = null
-                        )
+                        }
                     }
                 }
             }
 
-            item {
-                Spacer(modifier = Modifier.height(88.dp))
+            if (completedTasks.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(spacing.space1))
+                    Text(
+                        text = "Completed (${completedTasks.size})",
+                        style = typography.sectionTitle,
+                        color = colors.textSecondary
+                    )
+                }
+                item {
+                    LaContainerPanel {
+                        completedTasks.forEachIndexed { index, task ->
+                            TaskRowItem(
+                                task = task,
+                                onToggleComplete = {
+                                    scope.launch {
+                                        repository.setTaskCompleted(task.id, !task.isCompleted)
+                                            .onFailure { errorMessage = it.message }
+                                    }
+                                },
+                                onEdit = {
+                                    editingTask = task
+                                    showTaskDialog = true
+                                },
+                                onDelete = { taskPendingDelete = task },
+                                onStartFocus = null
+                            )
+                            if (index < completedTasks.lastIndex) {
+                                LaRowDivider()
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -403,14 +369,18 @@ fun DailyPlanningScreen(
 }
 
 @Composable
-private fun TaskRowCard(
+private fun TaskRowItem(
     task: Task,
     onToggleComplete: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onStartFocus: (() -> Unit)?
 ) {
-    val extendedColors = LocalExtendedColors.current
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+
     val metadataParts = buildList {
         add(task.category.displayName)
         task.plannedTime?.let { add(DateAttributionPolicy.formatDisplayTime(it)) }
@@ -422,110 +392,78 @@ private fun TaskRowCard(
         }
     }
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+            .clickable(onClick = onEdit)
+            .padding(vertical = spacing.space1),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onToggleComplete,
-                modifier = Modifier.semantics {
+                .semantics {
                     contentDescription = if (task.isCompleted) {
                         "Mark ${task.title} incomplete"
                     } else {
                         "Mark ${task.title} complete"
                     }
                 }
-            ) {
-                if (task.isCompleted) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = extendedColors.success
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.RadioButtonUnchecked,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+                .padding(end = spacing.space2)
+        ) {
+            LaAnimatedCheckbox(
+                checked = task.isCompleted,
+                onCheckedChange = { onToggleComplete() }
+            )
+        }
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 4.dp)
-            ) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                    ),
-                    color = if (task.isCompleted) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = metadataParts.joinToString(" · "),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = spacing.space2)
+        ) {
+            Text(
+                text = task.title,
+                style = typography.body.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                ),
+                color = if (task.isCompleted) colors.textSecondary else colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = metadataParts.joinToString(" · "),
+                style = typography.label,
+                color = colors.textSecondary
+            )
+        }
 
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(spacing.space1),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (onStartFocus != null && !task.isCompleted) {
-                IconButton(
+                LaCircularIconButton(
+                    icon = Icons.Outlined.PlayArrow,
+                    contentDescription = "Start focus session for ${task.title}",
                     onClick = onStartFocus,
-                    modifier = Modifier.semantics {
-                        contentDescription = "Start focus session for ${task.title}"
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.PlayArrow,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
+                    containerColor = tints.mint.base,
+                    contentColor = colors.textPrimary
+                )
             }
-
-            IconButton(
+            LaCircularIconButton(
+                icon = Icons.Outlined.Edit,
+                contentDescription = "Edit ${task.title}",
                 onClick = onEdit,
-                modifier = Modifier.semantics {
-                    contentDescription = "Edit ${task.title}"
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            IconButton(
+                containerColor = colors.surfaceVariant,
+                contentColor = colors.textSecondary
+            )
+            LaCircularIconButton(
+                icon = Icons.Outlined.DeleteOutline,
+                contentDescription = "Delete ${task.title}",
                 onClick = onDelete,
-                modifier = Modifier.semantics {
-                    contentDescription = "Delete ${task.title}"
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
+                containerColor = tints.rose.soft,
+                contentColor = colors.error
+            )
         }
     }
 }
@@ -544,7 +482,12 @@ fun TaskFormDialog(
         estimatedMinutes: Int?
     ) -> Result<Unit>
 ) {
+    val colors = LaTheme.colors
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
     val scope = rememberCoroutineScope()
+
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
     var category by rememberSaveable { mutableStateOf(initialTask?.category ?: TaskCategory.OTHER) }
     var plannedDateIso by rememberSaveable {
@@ -561,82 +504,95 @@ fun TaskFormDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(if (initialTask == null) "Add task" else "Edit task") },
+        shape = radii.shapeLg,
+        containerColor = colors.surface,
+        title = {
+            Text(
+                text = if (initialTask == null) "Add task" else "Edit task",
+                style = typography.sectionTitle,
+                color = colors.textPrimary
+            )
+        },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(spacing.space3)
             ) {
-                OutlinedTextField(
+                LaTextField(
                     value = title,
                     onValueChange = {
                         title = it
                         validationError = null
                     },
-                    label = { Text("Task name (required)") },
-                    placeholder = { Text("e.g. Prepare project presentation") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Task name (required)",
+                    placeholder = "e.g. Prepare project presentation",
+                    singleLine = true
                 )
 
                 Text(
                     text = "Category",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = typography.label,
+                    color = colors.textSecondary
                 )
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                    verticalArrangement = Arrangement.spacedBy(spacing.space2)
                 ) {
                     TaskCategory.entries.forEach { cat ->
-                        FilterChip(
+                        LaFilterChip(
+                            label = cat.displayName,
                             selected = category == cat,
-                            onClick = { category = cat },
-                            label = { Text(cat.displayName) }
+                            onClick = { category = cat }
                         )
                     }
                 }
 
-                OutlinedTextField(
+                LaTextField(
                     value = plannedDateIso,
                     onValueChange = {
                         plannedDateIso = it
                         validationError = null
                     },
-                    label = { Text("Planned date (YYYY-MM-DD)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Planned date (YYYY-MM-DD)",
+                    singleLine = true
                 )
 
-                OutlinedTextField(
+                LaTextField(
                     value = plannedTimeText,
                     onValueChange = {
                         plannedTimeText = it
                         validationError = null
                     },
-                    label = { Text("Planned time (optional, HH:mm)") },
-                    placeholder = { Text("e.g. 10:00 or leave blank") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Planned time (optional, HH:mm)",
+                    placeholder = "e.g. 10:00 or leave blank",
+                    singleLine = true
                 )
 
-                OutlinedTextField(
+                LaTextField(
                     value = estimatedMinutesText,
                     onValueChange = {
                         estimatedMinutesText = it
                         validationError = null
                     },
-                    label = { Text("Estimated duration in minutes (optional)") },
-                    placeholder = { Text("e.g. 30 or leave blank") },
+                    label = "Estimated duration in minutes (optional)",
+                    placeholder = "e.g. 30 or leave blank",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    singleLine = true
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
                     listOf(15, 30, 45, 60).forEach { preset ->
-                        TextButton(onClick = { estimatedMinutesText = preset.toString() }) {
-                            Text("${preset}m")
+                        Surface(
+                            shape = radii.shapeFull,
+                            color = colors.surfaceVariant,
+                            modifier = Modifier.clickable { estimatedMinutesText = preset.toString() }
+                        ) {
+                            Text(
+                                text = "${preset}m",
+                                style = typography.label.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary,
+                                modifier = Modifier.padding(horizontal = spacing.space3, vertical = 6.dp)
+                            )
                         }
                     }
                 }
@@ -644,21 +600,22 @@ fun TaskFormDialog(
                 if (validationError != null) {
                     Text(
                         text = validationError!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
+                        style = typography.label,
+                        color = colors.error
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
+            LaPrimaryButton(
+                text = if (initialTask == null) "Save task" else "Save changes",
                 enabled = !isSaving,
                 onClick = {
                     val parsedDate = try {
                         DateAttributionPolicy.parseIsoDate(plannedDateIso.trim())
                     } catch (_: Exception) {
                         validationError = "Enter a valid date in YYYY-MM-DD format."
-                        return@Button
+                        return@LaPrimaryButton
                     }
 
                     val trimmedTime = plannedTimeText.trim()
@@ -667,7 +624,7 @@ fun TaskFormDialog(
                     } else {
                         DateAttributionPolicy.parseLocalTimeOrNull(trimmedTime) ?: run {
                             validationError = "Enter planned time in 24-hour HH:mm format (e.g. 09:30 or 14:00)."
-                            return@Button
+                            return@LaPrimaryButton
                         }
                     }
 
@@ -678,7 +635,7 @@ fun TaskFormDialog(
                         val value = trimmedEstimate.toIntOrNull()
                         if (value == null || value <= 0 || value > 1440) {
                             validationError = "Estimated duration must be between 1 and 1440 minutes."
-                            return@Button
+                            return@LaPrimaryButton
                         }
                         value
                     }
@@ -690,17 +647,14 @@ fun TaskFormDialog(
                         res.onFailure { validationError = it.message ?: "Could not save task." }
                     }
                 }
-            ) {
-                Text(if (initialTask == null) "Save task" else "Save changes")
-            }
+            )
         },
         dismissButton = {
-            OutlinedButton(
+            LaSecondaryButton(
+                text = "Cancel",
                 enabled = !isSaving,
                 onClick = onDismiss
-            ) {
-                Text("Cancel")
-            }
+            )
         }
     )
 }

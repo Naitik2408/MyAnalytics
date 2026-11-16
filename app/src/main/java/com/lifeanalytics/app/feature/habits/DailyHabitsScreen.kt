@@ -1,8 +1,9 @@
 package com.lifeanalytics.app.feature.habits
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,33 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -50,13 +34,28 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.designsystem.ConfirmDeleteDialog
 import com.lifeanalytics.app.core.designsystem.DateSelectorBar
 import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
-import com.lifeanalytics.app.core.designsystem.MetricCard
+import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
+import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaFilterChip
+import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaStatTile
+import com.lifeanalytics.app.core.designsystem.LaTextButton
+import com.lifeanalytics.app.core.designsystem.LaTextField
+import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.SectionHeader
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
@@ -71,13 +70,18 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DailyHabitsScreen(
     repository: LifeAnalyticsRepository,
     initialDate: LocalDate = DateAttributionPolicy.todayLocalDate(),
     onNavigateBack: (() -> Unit)? = null
 ) {
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
+
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var selectedDateEpochDay by rememberSaveable { mutableStateOf(initialDate.toEpochDay()) }
     val selectedDate = LocalDate.ofEpochDay(selectedDateEpochDay)
@@ -120,180 +124,192 @@ fun DailyHabitsScreen(
     var habitToDelete by remember { mutableStateOf<Habit?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Daily Habits") },
-                navigationIcon = {
-                    if (onNavigateBack != null) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back"
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { showAddHabitDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Add,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Habit", fontWeight = FontWeight.SemiBold)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space3,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space3)
+    ) {
+        item {
+            LaScreenHeader(
+                title = "Daily Habits",
+                subtitle = DateAttributionPolicy.formatDisplayDate(selectedDate),
+                onNavigateBack = onNavigateBack,
+                trailingContent = {
+                    LaPrimaryButton(
+                        text = "Add Habit",
+                        icon = Icons.Outlined.Add,
+                        onClick = { showAddHabitDialog = true }
+                    )
+                }
             )
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+
+        item {
+            DateSelectorBar(
+                selectedDate = selectedDate,
+                today = today,
+                onDateSelected = { selectedDateEpochDay = it.toEpochDay() }
+            )
+        }
+
+        if (errorMessage != null) {
             item {
-                DateSelectorBar(
-                    selectedDate = selectedDate,
-                    today = today,
-                    onDateSelected = { selectedDateEpochDay = it.toEpochDay() }
+                ErrorBanner(
+                    message = errorMessage!!,
+                    onDismiss = { errorMessage = null }
+                )
+            }
+        }
+
+        // 2-column Bento Summary (Scheduled on date in butter, Last 30 days in lavender)
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+            ) {
+                LaStatTile(
+                    label = "Scheduled on date",
+                    value = dailySummary.completionRatioText,
+                    supportingText = if (dailySummary.hasDueHabits) {
+                        "${dailySummary.completedDueCount} of ${dailySummary.totalDueCount} completed"
+                    } else {
+                        "0 due on this weekday"
+                    },
+                    icon = Icons.Outlined.Repeat,
+                    containerColor = tints.butter.base,
+                    modifier = Modifier.weight(1f)
+                )
+                LaStatTile(
+                    label = "Last 30 days",
+                    value = consistency30d.consistencyPercent?.let { "$it%" } ?: "No due days",
+                    supportingText = if (consistency30d.totalDueOccurrences > 0) {
+                        "${consistency30d.completedDueOccurrences} / ${consistency30d.totalDueOccurrences} due days done"
+                    } else {
+                        "Consistency across due days"
+                    },
+                    icon = Icons.Outlined.CalendarMonth,
+                    containerColor = tints.lavender.base,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        if (isFutureDate) {
+            item {
+                LaTintedTile(
+                    containerColor = tints.butter.soft,
+                    shape = radii.shapeSm
+                ) {
+                    Text(
+                        text = "Viewing a future date. Scheduled habits are shown below, and completion can be checked on or before today.",
+                        style = typography.label,
+                        color = colors.onTintSecondary
+                    )
+                }
+            }
+        }
+
+        if (allHabits.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = "No habits created yet",
+                    message = "Create recurring habits with daily, weekday, weekend, or custom schedules to track consistency.",
+                    actionLabel = "Create First Habit",
+                    onActionClick = { showAddHabitDialog = true }
+                )
+            }
+        } else {
+            item {
+                SectionHeader(
+                    title = "Scheduled for ${DateAttributionPolicy.formatShortDate(selectedDate)} (${dailySummary.dueHabits.size})"
                 )
             }
 
-            if (errorMessage != null) {
-                item {
-                    ErrorBanner(
-                        message = errorMessage!!,
-                        onDismiss = { errorMessage = null }
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        label = "Scheduled on date",
-                        value = dailySummary.completionRatioText,
-                        supportingText = if (dailySummary.hasDueHabits) {
-                            "${dailySummary.completedDueCount} of ${dailySummary.totalDueCount} completed"
-                        } else {
-                            "0 due on this weekday"
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        label = "Last 30 days",
-                        value = consistency30d.consistencyPercent?.let { "$it%" } ?: "No due days",
-                        supportingText = if (consistency30d.totalDueOccurrences > 0) {
-                            "${consistency30d.completedDueOccurrences} / ${consistency30d.totalDueOccurrences} due days done"
-                        } else {
-                            "Consistency across due days"
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            if (isFutureDate) {
-                item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = "Viewing a future date. Scheduled habits are shown below, and completion can be checked on or before today.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-            }
-
-            if (allHabits.isEmpty()) {
+            if (dailySummary.dueHabits.isEmpty()) {
                 item {
                     EmptyStateCard(
-                        title = "No habits created yet",
-                        message = "Create recurring habits with daily, weekday, weekend, or custom schedules to track consistency.",
-                        actionLabel = "Create First Habit",
-                        onActionClick = { showAddHabitDialog = true }
+                        title = "No habits scheduled for this date",
+                        message = "Your active habits are scheduled on other weekdays."
                     )
                 }
             } else {
                 item {
+                    LaContainerPanel {
+                        dailySummary.dueHabits.forEachIndexed { index, item ->
+                            HabitDateRow(
+                                item = item,
+                                consistency = consistencyByHabitId[item.habit.id],
+                                isFutureDate = isFutureDate,
+                                onToggleCompleted = { checked ->
+                                    scope.launch {
+                                        repository.setHabitCompletionForDate(
+                                            habitId = item.habit.id,
+                                            date = selectedDate,
+                                            completed = checked
+                                        ).onFailure { err ->
+                                            errorMessage = err.message ?: "Unable to update habit."
+                                        }
+                                    }
+                                },
+                                onEdit = { habitToEdit = item.habit }
+                            )
+                            if (index < dailySummary.dueHabits.lastIndex) {
+                                LaRowDivider()
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (dailySummary.otherActiveHabits.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(spacing.space1))
                     SectionHeader(
-                        title = "Scheduled for ${DateAttributionPolicy.formatShortDate(selectedDate)} (${dailySummary.dueHabits.size})"
+                        title = "Not scheduled on this date (${dailySummary.otherActiveHabits.size})"
                     )
                 }
-
-                if (dailySummary.dueHabits.isEmpty()) {
-                    item {
-                        EmptyStateCard(
-                            title = "No habits scheduled for this date",
-                            message = "Your active habits are scheduled on other weekdays."
-                        )
-                    }
-                } else {
-                    items(dailySummary.dueHabits, key = { "due_${it.habit.id}" }) { item ->
-                        HabitDateRow(
-                            item = item,
-                            consistency = consistencyByHabitId[item.habit.id],
-                            isFutureDate = isFutureDate,
-                            onToggleCompleted = { checked ->
-                                scope.launch {
-                                    repository.setHabitCompletionForDate(
-                                        habitId = item.habit.id,
-                                        date = selectedDate,
-                                        completed = checked
-                                    ).onFailure { err ->
-                                        errorMessage = err.message ?: "Unable to update habit."
-                                    }
-                                }
-                            },
-                            onEdit = { habitToEdit = item.habit }
-                        )
+                item {
+                    LaContainerPanel {
+                        dailySummary.otherActiveHabits.forEachIndexed { index, item ->
+                            HabitNotScheduledRow(
+                                item = item,
+                                consistency = consistencyByHabitId[item.habit.id],
+                                onEdit = { habitToEdit = item.habit }
+                            )
+                            if (index < dailySummary.otherActiveHabits.lastIndex) {
+                                LaRowDivider()
+                            }
+                        }
                     }
                 }
+            }
 
-                if (dailySummary.otherActiveHabits.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        SectionHeader(
-                            title = "Not scheduled on this date (${dailySummary.otherActiveHabits.size})"
-                        )
-                    }
-                    items(dailySummary.otherActiveHabits, key = { "not_sched_${it.habit.id}" }) { item ->
-                        HabitNotScheduledRow(
-                            item = item,
-                            consistency = consistencyByHabitId[item.habit.id],
-                            onEdit = { habitToEdit = item.habit }
-                        )
-                    }
+            if (inactiveHabits.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(spacing.space1))
+                    SectionHeader(
+                        title = "Inactive habits (${inactiveHabits.size})"
+                    )
                 }
-
-                if (inactiveHabits.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        SectionHeader(
-                            title = "Inactive habits (${inactiveHabits.size})"
-                        )
-                    }
-                    items(inactiveHabits, key = { "inactive_${it.id}" }) { habit ->
-                        InactiveHabitRow(
-                            habit = habit,
-                            consistency = consistencyByHabitId[habit.id],
-                            onDelete = { habitToDelete = habit }
-                        )
+                item {
+                    LaContainerPanel {
+                        inactiveHabits.forEachIndexed { index, habit ->
+                            InactiveHabitRow(
+                                habit = habit,
+                                consistency = consistencyByHabitId[habit.id],
+                                onDelete = { habitToDelete = habit }
+                            )
+                            if (index < inactiveHabits.lastIndex) {
+                                LaRowDivider()
+                            }
+                        }
                     }
                 }
             }
@@ -384,66 +400,69 @@ private fun HabitDateRow(
     onToggleCompleted: (Boolean) -> Unit,
     onEdit: () -> Unit
 ) {
-    Card(
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !isFutureDate) { onToggleCompleted(!item.isCompleted) },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            .clickable(enabled = !isFutureDate) { onToggleCompleted(!item.isCompleted) }
+            .padding(vertical = spacing.space1),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .semantics { role = Role.Checkbox }
+                .padding(end = spacing.space2)
         ) {
-            Checkbox(
+            LaAnimatedCheckbox(
                 checked = item.isCompleted,
                 enabled = !isFutureDate,
                 onCheckedChange = onToggleCompleted
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.habit.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.habit.name,
+                style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(spacing.space1))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
+                Surface(
+                    shape = radii.shapeFull,
+                    color = tints.butter.base
                 ) {
-                    val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    ) {
-                        Text(
-                            text = scheduleLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
-                    }
-                    if (consistency != null && consistency.totalDueOccurrences > 0) {
-                        Text(
-                            text = "30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences} (${consistency.consistencyPercent}%)",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = scheduleLabel,
+                        style = typography.chartMicroLabel,
+                        color = colors.textPrimary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                if (consistency != null && consistency.totalDueOccurrences > 0) {
+                    Text(
+                        text = "30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences} (${consistency.consistencyPercent}%)",
+                        style = typography.label,
+                        color = colors.textSecondary
+                    )
                 }
             }
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Edit ${item.habit.name}",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
+        LaCircularIconButton(
+            icon = Icons.Outlined.Edit,
+            contentDescription = "Edit ${item.habit.name}",
+            onClick = onEdit,
+            containerColor = colors.surfaceVariant,
+            contentColor = colors.textSecondary
+        )
     }
 }
 
@@ -453,46 +472,41 @@ private fun HabitNotScheduledRow(
     consistency: HabitConsistencyItem?,
     onEdit: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+    val colors = LaTheme.colors
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = spacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.habit.name,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
-                val consistencyText = if (consistency != null && consistency.totalDueOccurrences > 0) {
-                    " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences} (${consistency.consistencyPercent}%)"
-                } else ""
-                Text(
-                    text = "Not scheduled today ($scheduleLabel)$consistencyText",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Edit ${item.habit.name}",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.habit.name,
+                style = typography.body.copy(fontWeight = FontWeight.Medium),
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
+            val consistencyText = if (consistency != null && consistency.totalDueOccurrences > 0) {
+                " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences} (${consistency.consistencyPercent}%)"
+            } else ""
+            Text(
+                text = "Not scheduled today ($scheduleLabel)$consistencyText",
+                style = typography.label,
+                color = colors.textSecondary
+            )
         }
+        LaCircularIconButton(
+            icon = Icons.Outlined.Edit,
+            contentDescription = "Edit ${item.habit.name}",
+            onClick = onEdit,
+            containerColor = colors.surfaceVariant,
+            contentColor = colors.textSecondary
+        )
     }
 }
 
@@ -502,47 +516,43 @@ private fun InactiveHabitRow(
     consistency: HabitConsistencyItem?,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = spacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = habit.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val deactivatedText = habit.deactivatedFromLocalDate?.let {
-                    "Deactivated ${DateAttributionPolicy.formatShortDate(it)}"
-                } ?: "Inactive"
-                val consistencyText = if (consistency != null && consistency.totalDueOccurrences > 0) {
-                    " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences}"
-                } else ""
-                Text(
-                    text = "$deactivatedText$consistencyText",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = "Delete ${habit.name}",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = habit.name,
+                style = typography.body,
+                color = colors.textSecondary
+            )
+            val deactivatedText = habit.deactivatedFromLocalDate?.let {
+                "Deactivated ${DateAttributionPolicy.formatShortDate(it)}"
+            } ?: "Inactive"
+            val consistencyText = if (consistency != null && consistency.totalDueOccurrences > 0) {
+                " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences}"
+            } else ""
+            Text(
+                text = "$deactivatedText$consistencyText",
+                style = typography.label,
+                color = colors.textSecondary
+            )
         }
+        LaCircularIconButton(
+            icon = Icons.Outlined.DeleteOutline,
+            contentDescription = "Delete ${habit.name}",
+            onClick = onDelete,
+            containerColor = tints.rose.soft,
+            contentColor = colors.error
+        )
     }
 }
 
@@ -556,6 +566,11 @@ fun HabitFormDialog(
     onDeactivate: (() -> Unit)?,
     onRequestDelete: (() -> Unit)?
 ) {
+    val colors = LaTheme.colors
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
+
     val currentPeriod = initialHabit?.effectiveScheduleOn(effectiveDate)
         ?: initialHabit?.schedulePeriods?.lastOrNull()
     var name by rememberSaveable { mutableStateOf(initialHabit?.name ?: "") }
@@ -578,74 +593,79 @@ fun HabitFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = radii.shapeLg,
+        containerColor = colors.surface,
         title = {
-            Text(if (initialHabit == null) "Add Habit" else "Edit Habit")
+            Text(
+                text = if (initialHabit == null) "Add Habit" else "Edit Habit",
+                style = typography.sectionTitle,
+                color = colors.textPrimary
+            )
         },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(spacing.space3)
             ) {
                 if (validationError != null) {
                     Text(
                         text = validationError!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
+                        style = typography.label,
+                        color = colors.error
                     )
                 }
 
-                OutlinedTextField(
+                LaTextField(
                     value = name,
                     onValueChange = {
                         name = it
                         validationError = null
                     },
-                    label = { Text("Habit name *") },
-                    placeholder = { Text("e.g., Read 20 pages, Exercise") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    label = "Habit name *",
+                    placeholder = "e.g., Read 20 pages, Exercise",
+                    singleLine = true
                 )
 
                 Text(
                     text = "Quick schedule",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = typography.label,
+                    color = colors.textSecondary
                 )
 
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                    verticalArrangement = Arrangement.spacedBy(spacing.space2)
                 ) {
-                    FilterChip(
+                    LaFilterChip(
+                        label = "Every day",
                         selected = selectedDays == everydaySet,
                         onClick = {
                             selectedDays = everydaySet
                             validationError = null
-                        },
-                        label = { Text("Every day") }
+                        }
                     )
-                    FilterChip(
+                    LaFilterChip(
+                        label = "Weekdays",
                         selected = selectedDays == weekdaysSet,
                         onClick = {
                             selectedDays = weekdaysSet
                             validationError = null
-                        },
-                        label = { Text("Weekdays") }
+                        }
                     )
-                    FilterChip(
+                    LaFilterChip(
+                        label = "Weekends",
                         selected = selectedDays == weekendsSet,
                         onClick = {
                             selectedDays = weekendsSet
                             validationError = null
-                        },
-                        label = { Text("Weekends") }
+                        }
                     )
                 }
 
                 Text(
                     text = "Scheduled weekdays *",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = typography.label,
+                    color = colors.textSecondary
                 )
 
                 FlowRow(
@@ -654,7 +674,8 @@ fun HabitFormDialog(
                 ) {
                     DayOfWeek.entries.forEach { day ->
                         val isSelected = selectedDays.contains(day)
-                        FilterChip(
+                        LaFilterChip(
+                            label = day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
                             selected = isSelected,
                             onClick = {
                                 selectedDays = if (isSelected) {
@@ -663,9 +684,6 @@ fun HabitFormDialog(
                                     selectedDays + day
                                 }
                                 validationError = null
-                            },
-                            label = {
-                                Text(day.getDisplayName(TextStyle.SHORT, Locale.ENGLISH))
                             }
                         )
                     }
@@ -674,8 +692,8 @@ fun HabitFormDialog(
                 if (initialHabit != null) {
                     Text(
                         text = "Schedule edits apply from today forward and preserve past schedule history.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = typography.label,
+                        color = colors.textSecondary
                     )
                 }
 
@@ -685,41 +703,44 @@ fun HabitFormDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         if (onDeactivate != null) {
-                            TextButton(onClick = onDeactivate) {
-                                Text("Deactivate habit")
-                            }
+                            LaTextButton(
+                                text = "Deactivate habit",
+                                onClick = onDeactivate
+                            )
                         }
                         if (onRequestDelete != null) {
-                            TextButton(onClick = onRequestDelete) {
-                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                            }
+                            LaTextButton(
+                                text = "Delete",
+                                onClick = onRequestDelete,
+                                color = colors.error
+                            )
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
+            LaPrimaryButton(
+                text = "Save",
                 onClick = {
                     val trimmed = name.trim()
                     if (trimmed.isEmpty()) {
                         validationError = "Enter a habit name."
-                        return@Button
+                        return@LaPrimaryButton
                     }
                     if (selectedDays.isEmpty()) {
                         validationError = "Select at least one scheduled weekday."
-                        return@Button
+                        return@LaPrimaryButton
                     }
                     onSave(trimmed, selectedDays)
                 }
-            ) {
-                Text("Save")
-            }
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            LaSecondaryButton(
+                text = "Cancel",
+                onClick = onDismiss
+            )
         }
     )
 }

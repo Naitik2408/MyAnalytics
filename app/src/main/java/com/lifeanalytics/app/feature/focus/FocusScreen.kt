@@ -1,36 +1,29 @@
 package com.lifeanalytics.app.feature.focus
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,23 +43,29 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeanalytics.app.core.designsystem.EmptyStateCard
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
-import com.lifeanalytics.app.core.designsystem.LocalExtendedColors
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaFilterChip
+import com.lifeanalytics.app.core.designsystem.LaHeroPanel
+import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaSessionTimeline
+import com.lifeanalytics.app.core.designsystem.LaTextField
+import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.LaTimelineSegment
+import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.SectionHeader
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.FocusSession
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
 import com.lifeanalytics.app.domain.model.FocusSessionType
-import com.lifeanalytics.app.domain.model.Task
 import com.lifeanalytics.app.domain.model.TaskCategory
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -76,7 +75,7 @@ private enum class StartFocusMode(val label: String) {
     GENERAL("Start general focus")
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FocusScreen(
     repository: LifeAnalyticsRepository,
@@ -85,7 +84,13 @@ fun FocusScreen(
     onConsumedPreselectedTask: () -> Unit = {},
     onNavigateBack: (() -> Unit)? = null
 ) {
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
     val scope = rememberCoroutineScope()
+
     val unresolvedSession by repository.observeUnresolvedSession()
         .collectAsStateWithLifecycle(initialValue = null)
     val allSessions by repository.observeAllSessions()
@@ -103,7 +108,6 @@ fun FocusScreen(
     var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var isActionInProgress by remember { mutableStateOf(false) }
 
-    // Check session interruption on launch and keep heartbeat updated while active
     var liveNowEpochMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
@@ -143,41 +147,49 @@ fun FocusScreen(
     val historySessions = remember(allSessions) {
         allSessions.filter { it.status == FocusSessionStatus.COMPLETED }
     }
-    val todayFocusedSeconds = remember(historySessions, today) {
-        DomainCalculations.sumCompletedFocusDurationSeconds(
-            historySessions.filter { it.startedLocalDate == today }
-        )
+    val todayCompletedSessions = remember(historySessions, today) {
+        historySessions.filter { it.startedLocalDate == today }
+    }
+    val todayFocusedSeconds = remember(todayCompletedSessions) {
+        DomainCalculations.sumCompletedFocusDurationSeconds(todayCompletedSessions)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Active Work & Focus") },
-                navigationIcon = {
-                    if (onNavigateBack != null) {
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back"
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+    val timelineSegments = remember(todayCompletedSessions) {
+        val zone = ZoneId.systemDefault()
+        todayCompletedSessions.mapIndexed { idx, session ->
+            val startZdt = Instant.ofEpochMilli(session.startedAtEpochMillis).atZone(zone)
+            val endMillis = session.endedAtEpochMillis
+                ?: (session.startedAtEpochMillis + session.focusedDurationSeconds * 1000L)
+            val endZdt = Instant.ofEpochMilli(endMillis).atZone(zone)
+            val startHour = startZdt.hour + startZdt.minute / 60f
+            val endHour = (endZdt.hour + endZdt.minute / 60f).coerceAtLeast(startHour + 0.25f)
+            LaTimelineSegment(
+                startHourFraction = startHour,
+                endHourFraction = endHour.coerceAtMost(24f),
+                label = session.displayTitle,
+                isHighlighted = idx == 0
             )
         }
-    ) { innerPadding ->
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding)
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space3,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space3)
     ) {
         item {
-            Spacer(modifier = Modifier.height(4.dp))
+            LaScreenHeader(
+                title = "Active Work & Focus",
+                subtitle = "Today's recorded focus: ${DateAttributionPolicy.formatSummaryDuration(todayFocusedSeconds)}",
+                onNavigateBack = onNavigateBack
+            )
         }
 
         if (errorMessage != null) {
@@ -191,27 +203,26 @@ fun FocusScreen(
 
         if (statusMessage != null) {
             item {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+                LaTintedTile(
+                    containerColor = tints.mint.soft,
+                    shape = radii.shapeSm
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = statusMessage!!,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = typography.body,
+                            color = colors.textPrimary,
                             modifier = Modifier.weight(1f)
                         )
-                        OutlinedButton(onClick = { statusMessage = null }) {
-                            Text("OK")
-                        }
+                        Spacer(modifier = Modifier.width(spacing.space2))
+                        LaSecondaryButton(
+                            text = "OK",
+                            onClick = { statusMessage = null }
+                        )
                     }
                 }
             }
@@ -286,216 +297,213 @@ fun FocusScreen(
             }
         } else {
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                LaContainerPanel(
+                    title = "Start a focus session",
+                    subtitle = "Paused time is excluded automatically. Recorded focus time measures active timer intervals."
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                        verticalArrangement = Arrangement.spacedBy(spacing.space2)
                     ) {
-                        Text(
-                            text = "Start a focus session",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Paused time is excluded automatically. Recorded focus time measures active timer intervals.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            StartFocusMode.entries.forEach { mode ->
-                                FilterChip(
-                                    selected = startMode == mode,
-                                    onClick = {
-                                        startMode = mode
-                                        errorMessage = null
-                                    },
-                                    label = { Text(mode.label) }
-                                )
-                            }
+                        StartFocusMode.entries.forEach { mode ->
+                            LaFilterChip(
+                                label = mode.label,
+                                selected = startMode == mode,
+                                onClick = {
+                                    startMode = mode
+                                    errorMessage = null
+                                }
+                            )
                         }
+                    }
 
-                        when (startMode) {
-                            StartFocusMode.EXISTING_TASK -> {
-                                if (incompleteTasks.isEmpty()) {
-                                    Text(
-                                        text = "No incomplete tasks planned for today. You can create a task and start, or start general focus.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                } else {
-                                    val effectiveTaskId = selectedTaskId?.takeIf { id ->
-                                        incompleteTasks.any { it.id == id }
-                                    } ?: incompleteTasks.first().id
+                    Spacer(modifier = Modifier.height(spacing.space4))
 
-                                    Text(
-                                        text = "Select a planned task:",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                    when (startMode) {
+                        StartFocusMode.EXISTING_TASK -> {
+                            if (incompleteTasks.isEmpty()) {
+                                Text(
+                                    text = "No incomplete tasks planned for today. You can create a task and start, or start general focus.",
+                                    style = typography.body,
+                                    color = colors.textSecondary
+                                )
+                            } else {
+                                val effectiveTaskId = selectedTaskId?.takeIf { id ->
+                                    incompleteTasks.any { it.id == id }
+                                } ?: incompleteTasks.first().id
+
+                                Text(
+                                    text = "Select a planned task:",
+                                    style = typography.label,
+                                    color = colors.textSecondary
+                                )
+                                Spacer(modifier = Modifier.height(spacing.space2))
+
+                                Column(verticalArrangement = Arrangement.spacedBy(spacing.space2)) {
                                     incompleteTasks.forEach { task ->
                                         val isSelected = task.id == effectiveTaskId
                                         Surface(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clickable { selectedTaskId = task.id },
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = if (isSelected) {
-                                                MaterialTheme.colorScheme.primaryContainer
-                                            } else {
-                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                            },
-                                            border = BorderStroke(
-                                                1.dp,
-                                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                                            )
+                                            shape = radii.shapeSm,
+                                            color = if (isSelected) tints.mint.base else colors.surfaceVariant
                                         ) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                    .padding(horizontal = spacing.space4, vertical = spacing.space3),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
                                                         text = task.title,
-                                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                                                        color = MaterialTheme.colorScheme.onSurface
+                                                        style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                                                        color = colors.textPrimary
                                                     )
                                                     Text(
                                                         text = task.category.displayName,
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        style = typography.label,
+                                                        color = if (isSelected) colors.onTintSecondary else colors.textSecondary
                                                     )
                                                 }
                                                 if (isSelected) {
-                                                    Text(
-                                                        text = "Selected",
-                                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
+                                                    Surface(
+                                                        shape = radii.shapeFull,
+                                                        color = colors.ink
+                                                    ) {
+                                                        Text(
+                                                            text = "Selected",
+                                                            style = typography.chartMicroLabel,
+                                                            color = colors.onInk,
+                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-
-                                    Button(
-                                        enabled = !isActionInProgress,
-                                        onClick = {
-                                            isActionInProgress = true
-                                            errorMessage = null
-                                            scope.launch {
-                                                repository.startFocusSession(taskId = effectiveTaskId)
-                                                    .onFailure { errorMessage = it.message }
-                                                isActionInProgress = false
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Start focus on selected task")
-                                    }
                                 }
-                            }
 
-                            StartFocusMode.NEW_TASK -> {
-                                OutlinedTextField(
-                                    value = newTaskTitle,
-                                    onValueChange = {
-                                        newTaskTitle = it
-                                        errorMessage = null
-                                    },
-                                    label = { Text("New task name (required)") },
-                                    placeholder = { Text("e.g. Write design summary") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TaskCategory.entries.forEach { cat ->
-                                        FilterChip(
-                                            selected = newTaskCategory == cat,
-                                            onClick = { newTaskCategory = cat },
-                                            label = { Text(cat.displayName) }
-                                        )
-                                    }
-                                }
-                                Button(
+                                Spacer(modifier = Modifier.height(spacing.space4))
+                                LaPrimaryButton(
+                                    text = "Start focus on selected task",
+                                    icon = Icons.Outlined.PlayArrow,
                                     enabled = !isActionInProgress,
+                                    modifier = Modifier.fillMaxWidth(),
                                     onClick = {
                                         isActionInProgress = true
                                         errorMessage = null
                                         scope.launch {
-                                            repository.createTaskAndStartFocus(
-                                                title = newTaskTitle,
-                                                category = newTaskCategory,
-                                                plannedDate = today
-                                            ).onSuccess {
-                                                newTaskTitle = ""
-                                            }.onFailure {
-                                                errorMessage = it.message
-                                            }
+                                            repository.startFocusSession(taskId = effectiveTaskId)
+                                                .onFailure { errorMessage = it.message }
                                             isActionInProgress = false
                                         }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Save task and start focus")
-                                }
-                            }
-
-                            StartFocusMode.GENERAL -> {
-                                OutlinedTextField(
-                                    value = generalDescription,
-                                    onValueChange = {
-                                        generalDescription = it
-                                        errorMessage = null
-                                    },
-                                    label = { Text("Activity description (optional)") },
-                                    placeholder = { Text("e.g. Reading or Deep work") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
+                                    }
                                 )
-                                Button(
-                                    enabled = !isActionInProgress,
-                                    onClick = {
-                                        isActionInProgress = true
-                                        errorMessage = null
-                                        scope.launch {
-                                            repository.startFocusSession(
-                                                taskId = null,
-                                                generalDescription = generalDescription
-                                            ).onSuccess {
-                                                generalDescription = ""
-                                            }.onFailure {
-                                                errorMessage = it.message
-                                            }
-                                            isActionInProgress = false
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Start general focus")
+                            }
+                        }
+
+                        StartFocusMode.NEW_TASK -> {
+                            LaTextField(
+                                value = newTaskTitle,
+                                onValueChange = {
+                                    newTaskTitle = it
+                                    errorMessage = null
+                                },
+                                label = "New task name (required)",
+                                placeholder = "e.g. Write design summary",
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(spacing.space3))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                                verticalArrangement = Arrangement.spacedBy(spacing.space2)
+                            ) {
+                                TaskCategory.entries.forEach { cat ->
+                                    LaFilterChip(
+                                        label = cat.displayName,
+                                        selected = newTaskCategory == cat,
+                                        onClick = { newTaskCategory = cat }
+                                    )
                                 }
                             }
+                            Spacer(modifier = Modifier.height(spacing.space4))
+                            LaPrimaryButton(
+                                text = "Save task and start focus",
+                                icon = Icons.Outlined.PlayArrow,
+                                enabled = !isActionInProgress,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    isActionInProgress = true
+                                    errorMessage = null
+                                    scope.launch {
+                                        repository.createTaskAndStartFocus(
+                                            title = newTaskTitle,
+                                            category = newTaskCategory,
+                                            plannedDate = today
+                                        ).onSuccess {
+                                            newTaskTitle = ""
+                                        }.onFailure {
+                                            errorMessage = it.message
+                                        }
+                                        isActionInProgress = false
+                                    }
+                                }
+                            )
+                        }
+
+                        StartFocusMode.GENERAL -> {
+                            LaTextField(
+                                value = generalDescription,
+                                onValueChange = {
+                                    generalDescription = it
+                                    errorMessage = null
+                                },
+                                label = "Activity description (optional)",
+                                placeholder = "e.g. Reading or Deep work",
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(spacing.space4))
+                            LaPrimaryButton(
+                                text = "Start general focus",
+                                icon = Icons.Outlined.PlayArrow,
+                                enabled = !isActionInProgress,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = {
+                                    isActionInProgress = true
+                                    errorMessage = null
+                                    scope.launch {
+                                        repository.startFocusSession(
+                                            taskId = null,
+                                            generalDescription = generalDescription
+                                        ).onSuccess {
+                                            generalDescription = ""
+                                        }.onFailure {
+                                            errorMessage = it.message
+                                        }
+                                        isActionInProgress = false
+                                    }
+                                }
+                            )
                         }
                     }
                 }
+            }
+        }
+
+        // Today's Session Timeline (Section 11.2.5)
+        item {
+            LaContainerPanel(
+                title = "Today's Session Timeline",
+                subtitle = "24-hour focus interval ruler"
+            ) {
+                LaSessionTimeline(
+                    segments = timelineSegments,
+                    tint = tints.mint,
+                    accessibilitySummary = "Today's focus timeline with ${timelineSegments.size} completed session(s)."
+                )
             }
         }
 
@@ -513,15 +521,17 @@ fun FocusScreen(
                 )
             }
         } else {
-            items(historySessions, key = { it.id }) { session ->
-                FocusHistoryRow(session = session)
+            item {
+                LaContainerPanel {
+                    historySessions.forEachIndexed { index, session ->
+                        FocusHistoryRow(session = session)
+                        if (index < historySessions.lastIndex) {
+                            LaRowDivider()
+                        }
+                    }
+                }
             }
         }
-
-        item {
-            Spacer(modifier = Modifier.height(28.dp))
-        }
-    }
     }
 }
 
@@ -534,6 +544,12 @@ private fun ActiveFocusTimerCard(
     onResume: () -> Unit,
     onFinish: () -> Unit
 ) {
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
+
     val isPaused = session.status == FocusSessionStatus.PAUSED
     val effectiveEndMillis = if (isPaused) {
         session.pauses.lastOrNull { it.resumedAtEpochMillis == null }?.pausedAtEpochMillis ?: nowEpochMillis
@@ -546,117 +562,81 @@ private fun ActiveFocusTimerCard(
         pauses = session.pauses
     )
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-        ),
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+    LaHeroPanel(
+        title = if (isPaused) "PAUSED — Paused time is not counted" else "FOCUS SESSION RUNNING",
+        subtitle = "Started at ${DateAttributionPolicy.formatInstantTime(session.startedAtEpochMillis)}",
+        icon = Icons.Outlined.Timer,
+        containerColor = tints.mint.strong
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (isPaused) {
-                    LocalExtendedColors.current.warning.copy(alpha = 0.2f)
-                } else {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                }
-            ) {
-                Text(
-                    text = if (isPaused) "PAUSED — Paused time is not counted" else "FOCUS SESSION RUNNING",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = if (isPaused) LocalExtendedColors.current.warning else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
             Text(
                 text = DateAttributionPolicy.formatLiveTimer(liveFocusedSeconds),
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                style = typography.timerValue,
+                color = colors.textPrimary
             )
             Text(
                 text = "Focused duration (pauses excluded)",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = typography.label,
+                color = colors.onTintSecondary
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(spacing.space4))
 
             Text(
                 text = "Working on",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = typography.label,
+                color = colors.onTintSecondary
             )
             Text(
                 text = session.displayTitle,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = typography.sectionTitle,
+                color = colors.textPrimary,
                 textAlign = TextAlign.Center
             )
             Text(
                 text = if (session.sessionType == FocusSessionType.TASK_LINKED) "Planned task" else "General focus",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = typography.label,
+                color = colors.onTintSecondary
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(spacing.space5))
 
+            // Section 17: Active Timer Hero uses primary ink button for Pause/Resume and tonal button for Finish
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(spacing.space3)
             ) {
                 if (isPaused) {
-                    Button(
+                    LaPrimaryButton(
+                        text = "Resume session",
+                        icon = Icons.Outlined.PlayArrow,
                         enabled = enabled,
                         onClick = onResume,
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Resume session")
-                    }
+                    )
                 } else {
-                    OutlinedButton(
+                    LaPrimaryButton(
+                        text = "Pause session",
+                        icon = Icons.Outlined.Pause,
                         enabled = enabled,
                         onClick = onPause,
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Outlined.Pause, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pause session")
-                    }
+                    )
                 }
 
-                Button(
+                LaSecondaryButton(
+                    text = "Finish session",
+                    icon = Icons.Outlined.Stop,
                     enabled = enabled,
                     onClick = onFinish,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
+                    containerColor = colors.surface.copy(alpha = 0.85f),
+                    contentColor = colors.textPrimary,
                     modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Stop, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Finish session")
-                }
+                )
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Started at ${DateAttributionPolicy.formatInstantTime(session.startedAtEpochMillis)}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -668,132 +648,123 @@ private fun InterruptedSessionRecoveryCard(
     onFinishAtLastConfirmed: () -> Unit,
     onResumeFromNow: () -> Unit
 ) {
-    val warningColor = LocalExtendedColors.current.warning
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.5.dp, warningColor)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.WarningAmber,
-                    contentDescription = "Session interrupted",
-                    tint = warningColor
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Resume your focus session?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Text(
-                text = session.interruptionReason
-                    ?: "Your previous focus session was interrupted and its timer could not be verified across the gap.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = "Activity: ${session.displayTitle} · Confirmed focused time: ${DateAttributionPolicy.formatSummaryDuration(session.focusedDurationSeconds)}",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = "Unverified interruption gaps are never counted as focused time.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    val colors = LaTheme.colors
+    val tints = colors.tints
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+    val radii = LaTheme.radii
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    enabled = enabled,
-                    onClick = onFinishAtLastConfirmed,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Finish at confirmed time")
-                }
-                Button(
-                    enabled = enabled,
-                    onClick = onResumeFromNow,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Resume from now")
-                }
-            }
+    LaTintedTile(
+        containerColor = tints.butter.base,
+        shape = radii.shapeLg
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Outlined.WarningAmber,
+                contentDescription = "Session interrupted",
+                tint = colors.warning
+            )
+            Spacer(modifier = Modifier.width(spacing.space2))
+            Text(
+                text = "Resume your focus session?",
+                style = typography.sectionTitle,
+                color = colors.textPrimary
+            )
+        }
+        Spacer(modifier = Modifier.height(spacing.space2))
+        Text(
+            text = session.interruptionReason
+                ?: "Your previous focus session was interrupted and its timer could not be verified across the gap.",
+            style = typography.body,
+            color = colors.onTintSecondary
+        )
+        Spacer(modifier = Modifier.height(spacing.space2))
+        Text(
+            text = "Activity: ${session.displayTitle} · Confirmed focused time: ${DateAttributionPolicy.formatSummaryDuration(session.focusedDurationSeconds)}",
+            style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.textPrimary
+        )
+        Spacer(modifier = Modifier.height(spacing.space1))
+        Text(
+            text = "Unverified interruption gaps are never counted as focused time.",
+            style = typography.label,
+            color = colors.onTintSecondary
+        )
+        Spacer(modifier = Modifier.height(spacing.space4))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+        ) {
+            LaSecondaryButton(
+                text = "Finish at confirmed time",
+                enabled = enabled,
+                onClick = onFinishAtLastConfirmed,
+                containerColor = colors.surface.copy(alpha = 0.85f),
+                contentColor = colors.textPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            LaPrimaryButton(
+                text = "Resume from now",
+                enabled = enabled,
+                onClick = onResumeFromNow,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
 
 @Composable
 private fun FocusHistoryRow(session: FocusSession) {
-    val extendedColors = LocalExtendedColors.current
+    val colors = LaTheme.colors
+    val typography = LaTheme.typography
+    val spacing = LaTheme.spacing
+
     val startTimeText = DateAttributionPolicy.formatInstantTime(session.startedAtEpochMillis)
     val endTimeText = session.endedAtEpochMillis?.let { DateAttributionPolicy.formatInstantTime(it) } ?: ""
     val typeText = if (session.sessionType == FocusSessionType.TASK_LINKED) "Task-linked" else "General focus"
     val statusBadge = if (session.interruptionReason != null) "Recovered" else "Completed"
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = spacing.space2),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = session.displayTitle,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = session.displayTitle,
+                style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${DateAttributionPolicy.formatShortDate(session.startedLocalDate)} · $startTimeText${if (endTimeText.isNotEmpty()) " – $endTimeText" else ""} · $typeText",
+                style = typography.label,
+                color = colors.textSecondary
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = DateAttributionPolicy.formatSummaryDuration(session.focusedDurationSeconds),
+                style = typography.sectionTitle,
+                color = colors.textPrimary
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircleOutline,
+                    contentDescription = null,
+                    tint = if (session.interruptionReason != null) colors.warning else colors.success,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .padding(end = 3.dp)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "${DateAttributionPolicy.formatShortDate(session.startedLocalDate)} · $startTimeText${if (endTimeText.isNotEmpty()) " – $endTimeText" else ""} · $typeText",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = statusBadge,
+                    style = typography.label,
+                    color = colors.textSecondary
                 )
-                if (session.interruptionReason != null) {
-                    Text(
-                        text = statusBadge,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = extendedColors.warning
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = DateAttributionPolicy.formatSummaryDuration(session.focusedDurationSeconds),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.CheckCircleOutline,
-                        contentDescription = null,
-                        tint = extendedColors.success,
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-                    Text(
-                        text = statusBadge,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
         }
     }

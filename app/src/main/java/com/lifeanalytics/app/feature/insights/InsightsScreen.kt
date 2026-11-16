@@ -1,10 +1,9 @@
 package com.lifeanalytics.app.feature.insights
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,50 +12,47 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.automirrored.outlined.EventNote
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.common.MoneyUtils
-import com.lifeanalytics.app.core.designsystem.MetricCard
-import com.lifeanalytics.app.core.designsystem.SectionHeader
-import com.lifeanalytics.app.core.designsystem.SuccessGreen
+import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaDateRangePill
+import com.lifeanalytics.app.core.designsystem.LaGoalGauge
+import com.lifeanalytics.app.core.designsystem.LaHeatDayCell
+import com.lifeanalytics.app.core.designsystem.LaHeroPanel
+import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
+import com.lifeanalytics.app.core.designsystem.LaIconChip
+import com.lifeanalytics.app.core.designsystem.LaMiniHeatCalendar
+import com.lifeanalytics.app.core.designsystem.LaPillBarChart
+import com.lifeanalytics.app.core.designsystem.LaPillBarEntry
+import com.lifeanalytics.app.core.designsystem.LaRingChart
+import com.lifeanalytics.app.core.designsystem.LaRingSlice
+import com.lifeanalytics.app.core.designsystem.LaScreenHeader
+import com.lifeanalytics.app.core.designsystem.LaSegmentedControl
+import com.lifeanalytics.app.core.designsystem.LaStatTile
+import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.LaTintedTile
+import com.lifeanalytics.app.core.designsystem.TintSteps
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
@@ -76,7 +72,6 @@ enum class InsightsPeriodType(val label: String) {
     MONTHLY("Monthly")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InsightsScreen(
     repository: LifeAnalyticsRepository,
@@ -85,6 +80,9 @@ fun InsightsScreen(
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var periodType by rememberSaveable { mutableStateOf(InsightsPeriodType.WEEKLY) }
     var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    var selectedFocusBarIdx by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTaskBarIdx by rememberSaveable { mutableIntStateOf(0) }
+
     val anchorDate = LocalDate.ofEpochDay(anchorDateEpoch)
 
     val (currentStart, currentEnd) = remember(periodType, anchorDate) {
@@ -176,9 +174,6 @@ fun InsightsScreen(
     val currentFinanceSummary = remember(currentTransactions) {
         DomainCalculations.calculateFinancePeriodSummary(currentTransactions)
     }
-    val previousFinanceSummary = remember(previousTransactions) {
-        DomainCalculations.calculateFinancePeriodSummary(previousTransactions)
-    }
 
     val taskComparison = remember(currentTaskSummary, previousTaskSummary) {
         DomainCalculations.comparePeriods(
@@ -190,44 +185,148 @@ fun InsightsScreen(
         DomainCalculations.comparePeriods(currentFocusSeconds, previousFocusSeconds)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Life Analytics & Insights") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
+    // Build chart buckets
+    val dateBuckets = remember(periodType, currentStart, currentEnd) {
+        buildDateBuckets(periodType, currentStart, currentEnd)
+    }
+
+    val focusBarEntries = remember(dateBuckets, completedSessionsInPeriod) {
+        dateBuckets.map { (label, bStart, bEnd) ->
+            val secs = completedSessionsInPeriod
+                .filter { !it.startedLocalDate.isBefore(bStart) && !it.startedLocalDate.isAfter(bEnd) }
+                .sumOf { it.focusedDurationSeconds }
+            LaPillBarEntry(
+                label = label,
+                value = secs / 60f,
+                valueLabel = DateAttributionPolicy.formatDurationSeconds(secs)
             )
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    InsightsPeriodType.entries.forEach { type ->
-                        FilterChip(
-                            selected = periodType == type,
-                            onClick = { periodType = type },
-                            label = { Text(type.label) }
-                        )
-                    }
-                }
-            }
+    }
 
-            item {
-                PeriodRangeSelectorCard(
-                    periodType = periodType,
-                    startDate = currentStart,
-                    endDate = currentEnd,
-                    today = today,
+    val taskBarEntries = remember(dateBuckets, currentTasks) {
+        dateBuckets.map { (label, bStart, bEnd) ->
+            val inBucket = currentTasks.filter {
+                !it.plannedDate.isBefore(bStart) && !it.plannedDate.isAfter(bEnd)
+            }
+            val done = inBucket.count { it.isCompleted }.toFloat()
+            val total = inBucket.size.toFloat()
+            LaPillBarEntry(
+                label = label,
+                value = done,
+                valueLabel = "${done.toInt()}/${total.toInt()}",
+                secondaryValue = total
+            )
+        }
+    }
+
+    // Build mini heat calendar cells for Habit / Activity consistency
+    val heatCells = remember(currentStart, currentEnd, allHabits, currentHabitCompletions, today) {
+        val dates = generateSequence(currentStart) { d ->
+            val next = d.plusDays(1)
+            if (next.isAfter(currentEnd)) null else next
+        }.toList().take(28)
+
+        dates.map { d ->
+            if (d.isAfter(today)) {
+                LaHeatDayCell(dayLabel = d.dayOfMonth.toString(), intensityLevel = 0)
+            } else {
+                val eval = DomainCalculations.evaluateHabitsForDate(
+                    habits = allHabits,
+                    completionsForDate = currentHabitCompletions.filter { it.completionDate == d },
+                    date = d
+                )
+                val level = when {
+                    eval.totalDueCount == 0 -> 0
+                    eval.completedDueCount == 0 -> 1
+                    eval.completedDueCount * 2 < eval.totalDueCount -> 2
+                    eval.completedDueCount < eval.totalDueCount -> 3
+                    else -> 4
+                }
+                LaHeatDayCell(
+                    dayLabel = d.dayOfMonth.toString(),
+                    intensityLevel = level
+                )
+            }
+        }
+    }
+
+    // Non-causal key takeaway sentence (Section 17)
+    val keyTakeaway = remember(
+        currentTaskSummary,
+        currentFocusSeconds,
+        currentHabitSummary,
+        currentFinanceSummary
+    ) {
+        when {
+            currentFocusSeconds > 0L && currentTaskSummary.completedCount > 0 ->
+                "In this period, you recorded ${DateAttributionPolicy.formatDurationSeconds(currentFocusSeconds)} of focused work alongside ${currentTaskSummary.completedCount} completed task(s)."
+            currentTaskSummary.hasTasks ->
+                "${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} planned tasks were completed in this period."
+            currentHabitSummary.totalDueOccurrences > 0 ->
+                "You completed ${currentHabitSummary.completedDueOccurrences} of ${currentHabitSummary.totalDueOccurrences} scheduled habit occurrences (${currentHabitSummary.consistencyPercent ?: 0}%)."
+            currentFinanceSummary.hasTransactions ->
+                "Recorded ${currentFinanceSummary.transactionCount} finance transaction(s) in this period."
+            else ->
+                "No records in this period yet — complete a task, run a focus session, or log an entry to observe patterns."
+        }
+    }
+
+    val colors = LaTheme.colors
+    val spacing = LaTheme.spacing
+    val fontScale = LocalDensity.current.fontScale
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentPadding = PaddingValues(
+            start = spacing.screenInset,
+            end = spacing.screenInset,
+            top = spacing.space2,
+            bottom = spacing.dockBottomClearance
+        ),
+        verticalArrangement = Arrangement.spacedBy(spacing.space4)
+    ) {
+        // 1. Compact Header: Title + Segmented Control + Pill Date-Range Control ("Today" / "This week" / "This month")
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LaScreenHeader(
+                    title = "Insights",
+                    subtitle = "Patterns from your recorded activity"
+                )
+
+                LaSegmentedControl(
+                    options = InsightsPeriodType.entries,
+                    selectedOption = periodType,
+                    onOptionSelected = {
+                        periodType = it
+                        selectedFocusBarIdx = 0
+                        selectedTaskBarIdx = 0
+                    },
+                    labelProvider = { it.label },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val isCurrentPeriod = !today.isBefore(currentStart) && !today.isAfter(currentEnd)
+                val rangeTitle = when (periodType) {
+                    InsightsPeriodType.DAILY -> DateAttributionPolicy.formatDisplayDate(currentStart)
+                    InsightsPeriodType.WEEKLY -> "${DateAttributionPolicy.formatShortDate(currentStart)} – ${DateAttributionPolicy.formatShortDate(currentEnd)}"
+                    InsightsPeriodType.MONTHLY -> DateAttributionPolicy.formatMonthYear(YearMonth.from(currentStart))
+                }
+                val currentBadgeLabel = when (periodType) {
+                    InsightsPeriodType.DAILY -> if (isCurrentPeriod) "Today" else "Selected day"
+                    InsightsPeriodType.WEEKLY -> if (isCurrentPeriod) "This week" else "Selected week"
+                    InsightsPeriodType.MONTHLY -> if (isCurrentPeriod) "This month" else "Selected month"
+                }
+                val resetButtonLabel = when (periodType) {
+                    InsightsPeriodType.DAILY -> "Today"
+                    InsightsPeriodType.WEEKLY -> "This week"
+                    InsightsPeriodType.MONTHLY -> "This month"
+                }
+
+                LaDateRangePill(
+                    title = rangeTitle,
+                    badgeText = currentBadgeLabel,
                     onPrevious = {
                         anchorDateEpoch = when (periodType) {
                             InsightsPeriodType.DAILY -> anchorDate.minusDays(1).toEpochDay()
@@ -242,173 +341,245 @@ fun InsightsScreen(
                             InsightsPeriodType.MONTHLY -> anchorDate.plusMonths(1).toEpochDay()
                         }
                     },
-                    onResetToToday = { anchorDateEpoch = today.toEpochDay() }
+                    onResetToCurrent = if (!isCurrentPeriod) {
+                        { anchorDateEpoch = today.toEpochDay() }
+                    } else null,
+                    resetLabel = resetButtonLabel
                 )
             }
+        }
 
-            // 4 Overview MetricCards
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        MetricCard(
+        // 2. Key Takeaway Sentence (Non-causal, evidence-based)
+        item {
+            LaTintedTile(
+                containerColor = colors.surface,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LaIconChip(
+                        icon = Icons.Outlined.BarChart,
+                        onTintedSurface = false
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = keyTakeaway,
+                        style = LaTheme.typography.body,
+                        color = colors.textPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        // 3. Lavender Hero Trend Panel (Focused Time Pill Bars)
+        item {
+            val safeIdx = selectedFocusBarIdx.coerceIn(0, (focusBarEntries.size - 1).coerceAtLeast(0))
+            val sessionCount = completedSessionsInPeriod.size
+            val avgSeconds = if (sessionCount > 0) currentFocusSeconds / sessionCount else 0L
+            val heroSubtitle = if (sessionCount > 0) {
+                "${DateAttributionPolicy.formatDurationSeconds(currentFocusSeconds)} total • $sessionCount session(s) • Avg ${DateAttributionPolicy.formatDurationSeconds(avgSeconds)} (${formatDurationComparisonText(focusComparison)})"
+            } else {
+                "0m focused time (${formatDurationComparisonText(focusComparison)})"
+            }
+
+            LaHeroPanel(
+                title = "Focused work trend",
+                subtitle = heroSubtitle,
+                icon = Icons.Outlined.Timer,
+                containerColor = colors.tints.lavender.strong
+            ) {
+                LaPillBarChart(
+                    entries = focusBarEntries,
+                    selectedIndex = safeIdx,
+                    onSelectIndex = { selectedFocusBarIdx = it },
+                    barTint = colors.tints.lavender,
+                    onHeroSurface = true,
+                    chartHeight = 140.dp,
+                    emptyMessage = "No completed focus sessions in this period",
+                    accessibilitySummary = "Focused work trend chart: $heroSubtitle"
+                )
+            }
+        }
+
+        // 4. Bento of Supporting Comparison Tiles (Tasks, Habits, Finance)
+        item {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val stackColumns = maxWidth < 340.dp || fontScale >= 1.35f
+                val taskRatio = if (currentTaskSummary.totalCount > 0) {
+                    currentTaskSummary.completedCount.toFloat() / currentTaskSummary.totalCount.toFloat()
+                } else 0f
+                val habitPctText = currentHabitSummary.consistencyPercent?.let { "$it%" } ?: "No due days"
+                val prevHabitPct = previousHabitSummary.consistencyPercent
+                val habitCompText = when {
+                    currentHabitSummary.totalDueOccurrences == 0 -> "0 scheduled occurrences"
+                    prevHabitPct != null && currentHabitSummary.consistencyPercent != null -> {
+                        val diff = currentHabitSummary.consistencyPercent - prevHabitPct
+                        val sign = if (diff >= 0) "+" else ""
+                        "${currentHabitSummary.completedDueOccurrences}/${currentHabitSummary.totalDueOccurrences} ($sign$diff pts vs prev)"
+                    }
+                    else -> "${currentHabitSummary.completedDueOccurrences} of ${currentHabitSummary.totalDueOccurrences} due done"
+                }
+                val netColor = when {
+                    currentFinanceSummary.netForPeriodMinor > 0L -> colors.income
+                    currentFinanceSummary.netForPeriodMinor < 0L -> colors.expense
+                    else -> colors.textPrimary
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
+                    if (stackColumns) {
+                        LaStatTile(
                             label = "Tasks done",
                             value = currentTaskSummary.completionRatioText,
+                            icon = Icons.AutoMirrored.Outlined.EventNote,
                             supportingText = formatComparisonText(taskComparison, "tasks"),
-                            modifier = Modifier.weight(1f)
+                            containerColor = colors.tints.lavender.base
                         )
-                        MetricCard(
-                            label = "Focused time",
-                            value = DateAttributionPolicy.formatDurationSeconds(currentFocusSeconds),
-                            supportingText = formatDurationComparisonText(focusComparison),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        val habitPctText = currentHabitSummary.consistencyPercent?.let { "$it%" } ?: "No due days"
-                        val prevHabitPct = previousHabitSummary.consistencyPercent
-                        val habitCompText = when {
-                            currentHabitSummary.totalDueOccurrences == 0 -> "0 scheduled occurrences"
-                            prevHabitPct != null && currentHabitSummary.consistencyPercent != null -> {
-                                val diff = currentHabitSummary.consistencyPercent - prevHabitPct
-                                val sign = if (diff >= 0) "+" else ""
-                                "${currentHabitSummary.completedDueOccurrences}/${currentHabitSummary.totalDueOccurrences} ($sign${diff} pts vs prev)"
-                            }
-                            else -> "${currentHabitSummary.completedDueOccurrences} of ${currentHabitSummary.totalDueOccurrences} due done"
-                        }
-                        MetricCard(
+                        LaStatTile(
                             label = "Habit consistency",
                             value = habitPctText,
+                            icon = Icons.Outlined.Repeat,
                             supportingText = habitCompText,
-                            modifier = Modifier.weight(1f)
+                            containerColor = colors.tints.butter.base
                         )
-
-                        val netColor = when {
-                            currentFinanceSummary.netForPeriodMinor > 0L -> SuccessGreen
-                            currentFinanceSummary.netForPeriodMinor < 0L -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
-                        val prevExpense = previousFinanceSummary.totalExpenseMinor
-                        val currExpense = currentFinanceSummary.totalExpenseMinor
-                        val financeSupport = if (prevExpense > 0L || currExpense > 0L) {
-                            "Expenses: ${MoneyUtils.formatMinorUnits(currExpense, currencyCode)}"
-                        } else {
-                            "Income minus expenses"
-                        }
-                        MetricCard(
+                        LaStatTile(
                             label = "Net for period",
                             value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
-                            supportingText = financeSupport,
-                            valueColor = netColor,
-                            modifier = Modifier.weight(1f)
+                            icon = Icons.Outlined.AccountBalanceWallet,
+                            supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
+                            containerColor = colors.tints.blue.base,
+                            valueColor = netColor
                         )
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            LaStatTile(
+                                label = "Tasks done",
+                                value = currentTaskSummary.completionRatioText,
+                                icon = Icons.AutoMirrored.Outlined.EventNote,
+                                supportingText = formatComparisonText(taskComparison, "tasks"),
+                                containerColor = colors.tints.lavender.base,
+                                modifier = Modifier.weight(1f),
+                                microVisual = {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        LaGoalGauge(
+                                            progress = taskRatio,
+                                            centerText = "${(taskRatio * 100).toInt()}%",
+                                            size = 82.dp
+                                        )
+                                    }
+                                }
+                            )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                            ) {
+                                LaStatTile(
+                                    label = "Habit consistency",
+                                    value = habitPctText,
+                                    icon = Icons.Outlined.Repeat,
+                                    supportingText = habitCompText,
+                                    containerColor = colors.tints.butter.base
+                                )
+                                LaStatTile(
+                                    label = "Net for period",
+                                    value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
+                                    icon = Icons.Outlined.AccountBalanceWallet,
+                                    supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
+                                    containerColor = colors.tints.blue.base,
+                                    valueColor = netColor
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
 
-            // 1. Tasks Analytics Card
-            item {
-                TasksAnalyticsCard(
-                    periodType = periodType,
-                    startDate = currentStart,
-                    endDate = currentEnd,
-                    tasks = currentTasks,
-                    totalEstimatedMinutes = currentTaskSummary.totalEstimatedMinutes
+        // 5. Task Completion Container Panel (Pill Bar Chart with Ghost Empty State)
+        item {
+            val estimateLine = currentTaskSummary.totalEstimatedMinutes?.let {
+                " • Planned estimate: ${DateAttributionPolicy.formatMinutes(it)}"
+            } ?: ""
+            LaContainerPanel(
+                title = "Task completion",
+                subtitle = "${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} planned tasks completed$estimateLine"
+            ) {
+                LaPillBarChart(
+                    entries = taskBarEntries,
+                    selectedIndex = selectedTaskBarIdx.coerceIn(0, (taskBarEntries.size - 1).coerceAtLeast(0)),
+                    onSelectIndex = { selectedTaskBarIdx = it },
+                    barTint = colors.tints.lavender,
+                    chartHeight = 132.dp,
+                    emptyMessage = "No tasks planned in this period",
+                    accessibilitySummary = "Task completion chart: ${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} tasks completed."
                 )
             }
+        }
 
-            // 2. Focus Analytics Card
-            item {
-                FocusAnalyticsCard(
-                    periodType = periodType,
-                    startDate = currentStart,
-                    endDate = currentEnd,
-                    completedSessions = completedSessionsInPeriod,
-                    totalFocusSeconds = currentFocusSeconds
-                )
-            }
+        // 6. Habit Consistency Container Panel (Heat Tiles + Per-Habit Track Bars)
+        item {
+            HabitsInsightsContainer(
+                habitPeriodSummary = currentHabitSummary,
+                heatCells = heatCells,
+                butterTint = colors.tints.butter
+            )
+        }
 
-            // 3. Habits Analytics Card
-            item {
-                HabitsAnalyticsCard(
-                    habitPeriodSummary = currentHabitSummary
-                )
-            }
-
-            // 4. Finance Analytics Card
-            item {
-                FinanceAnalyticsCard(
-                    financeSummary = currentFinanceSummary,
-                    currencyCode = currencyCode
-                )
-            }
+        // 7. Finance Summary Container Panel (Category Ring + Inflow/Outflow Track Bars)
+        item {
+            FinanceInsightsContainer(
+                financeSummary = currentFinanceSummary,
+                currencyCode = currencyCode
+            )
         }
     }
 }
 
 @Composable
-private fun PeriodRangeSelectorCard(
-    periodType: InsightsPeriodType,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    today: LocalDate,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onResetToToday: () -> Unit
+private fun HabitsInsightsContainer(
+    habitPeriodSummary: HabitPeriodSummary,
+    heatCells: List<LaHeatDayCell>,
+    butterTint: TintSteps
 ) {
-    val isCurrentPeriod = !today.isBefore(startDate) && !today.isAfter(endDate)
-    val rangeTitle = when (periodType) {
-        InsightsPeriodType.DAILY -> DateAttributionPolicy.formatDisplayDate(startDate)
-        InsightsPeriodType.WEEKLY -> "${DateAttributionPolicy.formatShortDate(startDate)} – ${DateAttributionPolicy.formatShortDate(endDate)}"
-        InsightsPeriodType.MONTHLY -> DateAttributionPolicy.formatMonthYear(YearMonth.from(startDate))
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+    LaContainerPanel(
+        title = "Habit consistency",
+        subtitle = if (habitPeriodSummary.totalDueOccurrences > 0) {
+            "${habitPeriodSummary.completedDueOccurrences} of ${habitPeriodSummary.totalDueOccurrences} scheduled occurrences completed (${habitPeriodSummary.consistencyPercent ?: 0}%)"
+        } else {
+            "Daily completion intensity across the period"
+        }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = onPrevious) {
-                Icon(
-                    imageVector = Icons.Outlined.ChevronLeft,
-                    contentDescription = "Previous period"
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = rangeTitle,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = if (isCurrentPeriod) "Current ${periodType.label.lowercase()}" else "Selected ${periodType.label.lowercase()}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isCurrentPeriod) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (!isCurrentPeriod) {
-                    TextButton(onClick = onResetToToday) {
-                        Text("Current")
+        LaMiniHeatCalendar(
+            cells = heatCells,
+            tint = LaTheme.colors.tints.lavender,
+            accessibilitySummary = "Habit consistency heat calendar across ${heatCells.size} days."
+        )
+
+        if (habitPeriodSummary.perHabitConsistency.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                habitPeriodSummary.perHabitConsistency.forEachIndexed { idx, item ->
+                    val ratio = if (item.totalDueOccurrences > 0) {
+                        item.completedDueOccurrences.toFloat() / item.totalDueOccurrences.toFloat()
+                    } else 0f
+                    val valueText = if (item.totalDueOccurrences > 0) {
+                        "${item.completedDueOccurrences}/${item.totalDueOccurrences} (${item.consistencyPercent}%)"
+                    } else {
+                        "No due days"
                     }
-                }
-                IconButton(onClick = onNext) {
-                    Icon(
-                        imageVector = Icons.Outlined.ChevronRight,
-                        contentDescription = "Next period"
+                    LaHorizontalTrackBar(
+                        label = item.habit.name,
+                        valueText = valueText,
+                        progress = ratio,
+                        tint = butterTint,
+                        useInkFill = idx == 0
                     )
                 }
             }
@@ -416,390 +587,62 @@ private fun PeriodRangeSelectorCard(
     }
 }
 
-private data class ChartBucket(
-    val label: String,
-    val primaryValue: Float,
-    val secondaryValue: Float = 0f
-)
-
 @Composable
-private fun TasksAnalyticsCard(
-    periodType: InsightsPeriodType,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    tasks: List<Task>,
-    totalEstimatedMinutes: Int?
-) {
-    val buckets = remember(periodType, startDate, endDate, tasks) {
-        buildDateBuckets(periodType, startDate, endDate).map { (label, rangeStart, rangeEnd) ->
-            val inBucket = tasks.filter { !it.plannedDate.isBefore(rangeStart) && !it.plannedDate.isAfter(rangeEnd) }
-            val completed = inBucket.count { it.isCompleted }.toFloat()
-            val total = inBucket.size.toFloat()
-            ChartBucket(label = label, primaryValue = completed, secondaryValue = total)
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SectionHeader(title = "Task Completion")
-            val completedTotal = tasks.count { it.isCompleted }
-            val estimateText = totalEstimatedMinutes?.let {
-                " • Planned estimate: ${DateAttributionPolicy.formatMinutes(it)}"
-            } ?: ""
-            Text(
-                text = "$completedTotal of ${tasks.size} planned tasks completed$estimateText",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (tasks.isEmpty()) {
-                Text(
-                    text = "No tasks planned in this period.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                DualBarChart(
-                    buckets = buckets,
-                    primaryColor = MaterialTheme.colorScheme.primary,
-                    secondaryColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                    contentDescriptionText = "Task completion bar chart showing $completedTotal completed out of ${tasks.size} planned tasks."
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    LegendDot(color = MaterialTheme.colorScheme.primary, label = "Completed")
-                    LegendDot(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), label = "Planned")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FocusAnalyticsCard(
-    periodType: InsightsPeriodType,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    completedSessions: List<com.lifeanalytics.app.domain.model.FocusSession>,
-    totalFocusSeconds: Long
-) {
-    val buckets = remember(periodType, startDate, endDate, completedSessions) {
-        buildDateBuckets(periodType, startDate, endDate).map { (label, rangeStart, rangeEnd) ->
-            val seconds = completedSessions
-                .filter { !it.startedLocalDate.isBefore(rangeStart) && !it.startedLocalDate.isAfter(rangeEnd) }
-                .sumOf { it.focusedDurationSeconds }
-            val minutes = (seconds / 60f)
-            ChartBucket(label = label, primaryValue = minutes, secondaryValue = minutes)
-        }
-    }
-
-    val sessionCount = completedSessions.size
-    val avgSeconds = if (sessionCount > 0) totalFocusSeconds / sessionCount else 0L
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SectionHeader(title = "Focused Work")
-            val summaryLine = if (sessionCount > 0) {
-                "$sessionCount completed session(s) • Average ${DateAttributionPolicy.formatDurationSeconds(avgSeconds)}"
-            } else {
-                "0 completed sessions in this period"
-            }
-            Text(
-                text = summaryLine,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (sessionCount == 0) {
-                Text(
-                    text = "No completed focus sessions recorded in this period.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                DualBarChart(
-                    buckets = buckets,
-                    primaryColor = MaterialTheme.colorScheme.secondary,
-                    secondaryColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f),
-                    contentDescriptionText = "Focus duration bar chart showing ${DateAttributionPolicy.formatDurationSeconds(totalFocusSeconds)} across $sessionCount sessions."
-                )
-                LegendDot(color = MaterialTheme.colorScheme.secondary, label = "Focused minutes (paused time excluded)")
-            }
-        }
-    }
-}
-
-@Composable
-private fun HabitsAnalyticsCard(
-    habitPeriodSummary: HabitPeriodSummary
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SectionHeader(title = "Habit Consistency")
-            if (habitPeriodSummary.perHabitConsistency.isEmpty()) {
-                Text(
-                    text = "No habits created yet.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                habitPeriodSummary.perHabitConsistency.forEach { item ->
-                    val ratio = if (item.totalDueOccurrences > 0) {
-                        (item.completedDueOccurrences.toFloat() / item.totalDueOccurrences.toFloat()).coerceIn(0f, 1f)
-                    } else 0f
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = item.habit.name,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            val rightText = if (item.totalDueOccurrences > 0) {
-                                "${item.completedDueOccurrences} / ${item.totalDueOccurrences} (${item.consistencyPercent}%)"
-                            } else {
-                                "No due days in period"
-                            }
-                            Text(
-                                text = rightText,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        LinearProgressIndicator(
-                            progress = { ratio },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp),
-                            color = SuccessGreen,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FinanceAnalyticsCard(
+private fun FinanceInsightsContainer(
     financeSummary: FinancePeriodSummary,
     currencyCode: String
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            SectionHeader(title = "Finance Summary")
-            if (!financeSummary.hasTransactions) {
-                Text(
-                    text = "No income or expense transactions recorded in this period.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                val maxFlow = maxOf(financeSummary.totalIncomeMinor, financeSummary.totalExpenseMinor, 1L)
-                val incomeRatio = (financeSummary.totalIncomeMinor.toFloat() / maxFlow.toFloat()).coerceIn(0f, 1f)
-                val expenseRatio = (financeSummary.totalExpenseMinor.toFloat() / maxFlow.toFloat()).coerceIn(0f, 1f)
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Income", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = SuccessGreen
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { incomeRatio },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp),
-                        color = SuccessGreen,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Expenses", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                    LinearProgressIndicator(
-                        progress = { expenseRatio },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp),
-                        color = MaterialTheme.colorScheme.error,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-
-                if (financeSummary.expensesByCategoryMinor.isNotEmpty() && financeSummary.totalExpenseMinor > 0L) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Top expense categories",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    financeSummary.expensesByCategoryMinor.entries.forEach { (category, amountMinor) ->
-                        val pct = ((amountMinor * 100.0) / financeSummary.totalExpenseMinor).toInt()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "$category ($pct%)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = MoneyUtils.formatMinorUnits(amountMinor, currencyCode),
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DualBarChart(
-    buckets: List<ChartBucket>,
-    primaryColor: Color,
-    secondaryColor: Color,
-    contentDescriptionText: String
-) {
-    val maxVal = buckets.maxOfOrNull { maxOf(it.primaryValue, it.secondaryValue) }?.coerceAtLeast(1f) ?: 1f
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = contentDescriptionText }
-    ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(110.dp)
-        ) {
-            val count = buckets.size.coerceAtLeast(1)
-            val slotWidth = size.width / count
-            val barWidth = (slotWidth * 0.52f).coerceAtMost(36.dp.toPx())
-
-            buckets.forEachIndexed { index, bucket ->
-                val centerX = index * slotWidth + slotWidth / 2f
-                val left = centerX - barWidth / 2f
-
-                val secRatio = (bucket.secondaryValue / maxVal).coerceIn(0f, 1f)
-                val secHeight = (size.height * secRatio).coerceAtLeast(if (bucket.secondaryValue > 0f) 4.dp.toPx() else 2.dp.toPx())
-                drawRoundRect(
-                    color = secondaryColor,
-                    topLeft = Offset(left, size.height - secHeight),
-                    size = Size(barWidth, secHeight),
-                    cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
-                )
-
-                if (bucket.primaryValue > 0f) {
-                    val priRatio = (bucket.primaryValue / maxVal).coerceIn(0f, 1f)
-                    val priHeight = (size.height * priRatio).coerceAtLeast(4.dp.toPx())
-                    drawRoundRect(
-                        color = primaryColor,
-                        topLeft = Offset(left, size.height - priHeight),
-                        size = Size(barWidth, priHeight),
-                        cornerRadius = CornerRadius(6.dp.toPx(), 6.dp.toPx())
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            buckets.forEach { bucket ->
-                Text(
-                    text = bucket.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    modifier = Modifier.weight(1f)
+    val colors = LaTheme.colors
+    val slices = remember(financeSummary, currencyCode) {
+        if (financeSummary.totalExpenseMinor <= 0L) {
+            emptyList()
+        } else {
+            financeSummary.expensesByCategoryMinor.entries.take(5).map { (cat, minor) ->
+                val pct = ((minor * 100.0) / financeSummary.totalExpenseMinor).toInt().coerceAtLeast(1)
+                LaRingSlice(
+                    label = cat,
+                    amountValue = minor.toFloat(),
+                    formattedValue = MoneyUtils.formatMinorUnits(minor, currencyCode),
+                    percentage = pct
                 )
             }
         }
     }
-}
 
-@Composable
-private fun LegendDot(
-    color: Color,
-    label: String
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .background(color = color, shape = CircleShape)
+    LaContainerPanel(
+        title = "Finance summary",
+        subtitle = if (financeSummary.hasTransactions) {
+            "${financeSummary.transactionCount} transaction(s) in this period"
+        } else {
+            "Income, expenses, and category share"
+        }
+    ) {
+        val maxFlow = maxOf(financeSummary.totalIncomeMinor, financeSummary.totalExpenseMinor, 1L)
+        val incomeRatio = if (financeSummary.hasTransactions) {
+            financeSummary.totalIncomeMinor.toFloat() / maxFlow.toFloat()
+        } else 0f
+        val expenseRatio = if (financeSummary.hasTransactions) {
+            financeSummary.totalExpenseMinor.toFloat() / maxFlow.toFloat()
+        } else 0f
+
+        LaHorizontalTrackBar(
+            label = "Income (+)",
+            valueText = MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode),
+            progress = incomeRatio,
+            tint = colors.tints.mint
         )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        Spacer(modifier = Modifier.height(10.dp))
+        LaHorizontalTrackBar(
+            label = "Expenses (-)",
+            valueText = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
+            progress = expenseRatio,
+            tint = colors.tints.rose
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        LaRingChart(
+            slices = slices,
+            emptyMessage = "No expense categories recorded in this period.",
+            accessibilitySummary = "Finance expense breakdown ring chart."
         )
     }
 }
@@ -825,7 +668,7 @@ private fun buildDateBuckets(
             var weekIdx = 1
             while (!cursor.isAfter(endDate)) {
                 val chunkEnd = cursor.plusDays(6).let { if (it.isAfter(endDate)) endDate else it }
-                buckets.add(Triple("W$weekIdx", cursor, chunkEnd))
+                buckets.add(Triple("Wk $weekIdx", cursor, chunkEnd))
                 cursor = chunkEnd.plusDays(1)
                 weekIdx++
             }
@@ -848,7 +691,7 @@ private fun formatComparisonText(comparison: PeriodComparison, unitLabel: String
 
 private fun formatDurationComparisonText(comparison: PeriodComparison): String {
     if (comparison.previousValue == 0L && comparison.currentValue == 0L) {
-        return "0m in previous period"
+        return "0m previously"
     }
     val prevFormatted = DateAttributionPolicy.formatDurationSeconds(comparison.previousValue)
     if (comparison.previousValue == 0L) {
