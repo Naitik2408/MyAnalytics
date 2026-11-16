@@ -2,9 +2,17 @@ package com.lifeanalytics.app.ui
 
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.lifeanalytics.app.core.designsystem.DarkLaColors
+import com.lifeanalytics.app.core.designsystem.DefaultLaTypeScale
+import com.lifeanalytics.app.core.designsystem.LaRadii
+import com.lifeanalytics.app.core.designsystem.LightLaColors
+import com.lifeanalytics.app.core.designsystem.ModuleTint
 import com.lifeanalytics.app.core.time.TimeProvider
 import com.lifeanalytics.app.data.local.LifeAnalyticsDatabase
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
@@ -17,9 +25,10 @@ import com.lifeanalytics.app.domain.model.TransactionType
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import java.io.File
 import java.time.DayOfWeek
-import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import kotlin.math.max
+import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -183,6 +192,50 @@ class LifeAnalyticsIntegrationTest {
         assertEquals(500_000L, financeSummary.totalIncomeMinor)
         assertEquals(35_000L, financeSummary.totalExpenseMinor)
         assertEquals(465_000L, financeSummary.netForPeriodMinor)
+    }
+
+    @Test
+    fun designSystemV12_tokensMeetContrastTabularAndModuleTintRequirements() {
+        fun contrastRatio(fg: Color, bg: Color): Float {
+            val l1 = fg.luminance()
+            val l2 = bg.luminance()
+            val brightest = max(l1, l2)
+            val darkest = min(l1, l2)
+            return (brightest + 0.05f) / (darkest + 0.05f)
+        }
+
+        // Light mode WCAG AA >= 4.5:1 checks
+        assertTrue(contrastRatio(LightLaColors.textPrimary, LightLaColors.surface) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.textSecondary, LightLaColors.surface) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onInk, LightLaColors.ink) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onTintSecondary, LightLaColors.tints.lavender.base) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onTintSecondary, LightLaColors.tints.mint.base) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onTintSecondary, LightLaColors.tints.blue.base) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onTintSecondary, LightLaColors.tints.rose.base) >= 4.5f)
+        assertTrue(contrastRatio(LightLaColors.onTintSecondary, LightLaColors.tints.butter.base) >= 4.5f)
+
+        // Dark mode WCAG AA >= 4.5:1 checks
+        assertTrue(contrastRatio(DarkLaColors.textPrimary, DarkLaColors.surface) >= 4.5f)
+        assertTrue(contrastRatio(DarkLaColors.textSecondary, DarkLaColors.surface) >= 4.5f)
+        assertTrue(contrastRatio(DarkLaColors.onInk, DarkLaColors.ink) >= 4.5f)
+        assertTrue(contrastRatio(DarkLaColors.onTintSecondary, DarkLaColors.tints.lavender.base) >= 4.5f)
+
+        // Tabular figures enabled on metrics, timers, and chart micro labels
+        assertEquals("tnum", DefaultLaTypeScale.metricValue.fontFeatureSettings)
+        assertEquals("tnum", DefaultLaTypeScale.timerValue.fontFeatureSettings)
+        assertEquals("tnum", DefaultLaTypeScale.chartMicroLabel.fontFeatureSettings)
+
+        // Module tint map (Section 4.4)
+        assertEquals(LightLaColors.tints.lavender, LightLaColors.tintFor(ModuleTint.TASKS))
+        assertEquals(LightLaColors.tints.mint, LightLaColors.tintFor(ModuleTint.FOCUS))
+        assertEquals(LightLaColors.tints.butter, LightLaColors.tintFor(ModuleTint.HABITS))
+        assertEquals(LightLaColors.tints.blue, LightLaColors.tintFor(ModuleTint.FINANCE))
+        assertEquals(LightLaColors.tints.rose, LightLaColors.tintFor(ModuleTint.REVIEW))
+        assertEquals(LightLaColors.tints.lavender, LightLaColors.tintFor(ModuleTint.INSIGHTS))
+
+        // Concentric radius helper (Section 6.2)
+        val radii = LaRadii()
+        assertNotNull(radii.concentricInner(32.dp, 20.dp))
     }
 
     @Test
