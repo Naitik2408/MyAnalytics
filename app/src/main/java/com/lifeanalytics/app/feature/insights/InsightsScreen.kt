@@ -35,14 +35,16 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.common.MoneyUtils
+import com.lifeanalytics.app.core.designsystem.LaCollapsedEmptyRow
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaDateRangePill
-import com.lifeanalytics.app.core.designsystem.LaGoalGauge
 import com.lifeanalytics.app.core.designsystem.LaHeatDayCell
 import com.lifeanalytics.app.core.designsystem.LaHeroPanel
 import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
 import com.lifeanalytics.app.core.designsystem.LaIconChip
+import com.lifeanalytics.app.core.designsystem.LaMicroProgressBar
 import com.lifeanalytics.app.core.designsystem.LaMiniHeatCalendar
+import com.lifeanalytics.app.core.designsystem.LaPeriodEmptyCard
 import com.lifeanalytics.app.core.designsystem.LaPillBarChart
 import com.lifeanalytics.app.core.designsystem.LaPillBarEntry
 import com.lifeanalytics.app.core.designsystem.LaRingChart
@@ -56,7 +58,6 @@ import com.lifeanalytics.app.core.designsystem.TintSteps
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
-import com.lifeanalytics.app.domain.model.Task
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import com.lifeanalytics.app.domain.usecase.FinancePeriodSummary
 import com.lifeanalytics.app.domain.usecase.HabitPeriodSummary
@@ -250,6 +251,11 @@ fun InsightsScreen(
         }
     }
 
+    val isPeriodCompletelyEmpty = !currentTaskSummary.hasTasks &&
+        currentFocusSeconds == 0L &&
+        currentHabitSummary.totalDueOccurrences == 0 &&
+        !currentFinanceSummary.hasTransactions
+
     // Non-causal key takeaway sentence (Section 17)
     val keyTakeaway = remember(
         currentTaskSummary,
@@ -266,8 +272,7 @@ fun InsightsScreen(
                 "You completed ${currentHabitSummary.completedDueOccurrences} of ${currentHabitSummary.totalDueOccurrences} scheduled habit occurrences (${currentHabitSummary.consistencyPercent ?: 0}%)."
             currentFinanceSummary.hasTransactions ->
                 "Recorded ${currentFinanceSummary.transactionCount} finance transaction(s) in this period."
-            else ->
-                "No records in this period yet — complete a task, run a focus session, or log an entry to observe patterns."
+            else -> null
         }
     }
 
@@ -349,29 +354,31 @@ fun InsightsScreen(
             }
         }
 
-        // 2. Key Takeaway Sentence (Non-causal, evidence-based)
-        item {
-            LaTintedTile(
-                containerColor = colors.surface,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LaIconChip(
-                        icon = Icons.Outlined.BarChart,
-                        onTintedSurface = false
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = keyTakeaway,
-                        style = LaTheme.typography.body,
-                        color = colors.textPrimary,
-                        modifier = Modifier.weight(1f)
-                    )
+        // 2. Key Takeaway Sentence (shown only when real records exist so we never duplicate empty banners)
+        if (keyTakeaway != null) {
+            item {
+                LaTintedTile(
+                    containerColor = colors.surface,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LaIconChip(
+                            icon = Icons.Outlined.BarChart,
+                            onTintedSurface = false
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = keyTakeaway,
+                            style = LaTheme.typography.body,
+                            color = colors.textPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
 
-        // 3. Lavender Hero Trend Panel (Focused Time Pill Bars)
+        // 3. Lavender Hero Trend Panel (Focused Time Pill Bars; flat ghost pills when empty per Rule 5)
         item {
             val safeIdx = selectedFocusBarIdx.coerceIn(0, (focusBarEntries.size - 1).coerceAtLeast(0))
             val sessionCount = completedSessionsInPeriod.size
@@ -394,21 +401,21 @@ fun InsightsScreen(
                     onSelectIndex = { selectedFocusBarIdx = it },
                     barTint = colors.tints.lavender,
                     onHeroSurface = true,
-                    chartHeight = 140.dp,
-                    emptyMessage = "No completed focus sessions in this period",
+                    chartHeight = if (sessionCount > 0) 132.dp else 96.dp,
+                    emptyMessage = "", // Hero subtitle already communicates empty status (Rule 5)
                     accessibilitySummary = "Focused work trend chart: $heroSubtitle"
                 )
             }
         }
 
-        // 4. Bento of Supporting Comparison Tiles (Tasks, Habits, Finance)
+        // 4. Supporting Comparison Tiles (Rules 2, 6, 8)
         item {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val stackColumns = maxWidth < 340.dp || fontScale >= 1.35f
                 val taskRatio = if (currentTaskSummary.totalCount > 0) {
                     currentTaskSummary.completedCount.toFloat() / currentTaskSummary.totalCount.toFloat()
                 } else 0f
-                val habitPctText = currentHabitSummary.consistencyPercent?.let { "$it%" } ?: "No due days"
+                val habitPctText = currentHabitSummary.consistencyPercent?.let { "$it%" } ?: "—"
                 val prevHabitPct = previousHabitSummary.consistencyPercent
                 val habitCompText = when {
                     currentHabitSummary.totalDueOccurrences == 0 -> "0 scheduled occurrences"
@@ -425,119 +432,144 @@ fun InsightsScreen(
                     else -> colors.textPrimary
                 }
 
+                val tasksTile: @Composable (Modifier) -> Unit = { mod ->
+                    LaStatTile(
+                        label = "Tasks done",
+                        value = if (currentTaskSummary.hasTasks) currentTaskSummary.completionRatioText else "0",
+                        icon = Icons.AutoMirrored.Outlined.EventNote,
+                        supportingText = if (currentTaskSummary.hasTasks) {
+                            formatComparisonText(taskComparison, "tasks")
+                        } else {
+                            "No tasks planned"
+                        },
+                        containerColor = colors.tints.lavender.base,
+                        isEmptyValue = !currentTaskSummary.hasTasks,
+                        minHeight = 144.dp,
+                        modifier = mod,
+                        microVisual = if (currentTaskSummary.hasTasks) {
+                            { LaMicroProgressBar(progress = taskRatio) }
+                        } else null
+                    )
+                }
+
+                val habitsTile: @Composable (Modifier) -> Unit = { mod ->
+                    LaStatTile(
+                        label = "Habit consistency",
+                        value = habitPctText,
+                        icon = Icons.Outlined.Repeat,
+                        supportingText = habitCompText,
+                        containerColor = colors.tints.butter.base,
+                        isEmptyValue = currentHabitSummary.consistencyPercent == null,
+                        minHeight = 144.dp,
+                        modifier = mod
+                    )
+                }
+
+                val netTile: @Composable (Modifier) -> Unit = { mod ->
+                    LaStatTile(
+                        label = "Net for period",
+                        value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
+                        icon = Icons.Outlined.AccountBalanceWallet,
+                        supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
+                        containerColor = colors.tints.blue.base,
+                        valueColor = netColor,
+                        isEmptyValue = !currentFinanceSummary.hasTransactions,
+                        minHeight = 132.dp,
+                        modifier = mod
+                    )
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
                     if (stackColumns) {
-                        LaStatTile(
-                            label = "Tasks done",
-                            value = currentTaskSummary.completionRatioText,
-                            icon = Icons.AutoMirrored.Outlined.EventNote,
-                            supportingText = formatComparisonText(taskComparison, "tasks"),
-                            containerColor = colors.tints.lavender.base
-                        )
-                        LaStatTile(
-                            label = "Habit consistency",
-                            value = habitPctText,
-                            icon = Icons.Outlined.Repeat,
-                            supportingText = habitCompText,
-                            containerColor = colors.tints.butter.base
-                        )
-                        LaStatTile(
-                            label = "Net for period",
-                            value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
-                            icon = Icons.Outlined.AccountBalanceWallet,
-                            supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
-                            containerColor = colors.tints.blue.base,
-                            valueColor = netColor
-                        )
+                        tasksTile(Modifier.fillMaxWidth())
+                        habitsTile(Modifier.fillMaxWidth())
+                        netTile(Modifier.fillMaxWidth())
                     } else {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter),
-                            verticalAlignment = Alignment.Top
+                            horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
                         ) {
-                            LaStatTile(
-                                label = "Tasks done",
-                                value = currentTaskSummary.completionRatioText,
-                                icon = Icons.AutoMirrored.Outlined.EventNote,
-                                supportingText = formatComparisonText(taskComparison, "tasks"),
-                                containerColor = colors.tints.lavender.base,
-                                modifier = Modifier.weight(1f),
-                                microVisual = {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        LaGoalGauge(
-                                            progress = taskRatio,
-                                            centerText = "${(taskRatio * 100).toInt()}%",
-                                            size = 82.dp
-                                        )
-                                    }
-                                }
-                            )
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                            ) {
-                                LaStatTile(
-                                    label = "Habit consistency",
-                                    value = habitPctText,
-                                    icon = Icons.Outlined.Repeat,
-                                    supportingText = habitCompText,
-                                    containerColor = colors.tints.butter.base
-                                )
-                                LaStatTile(
-                                    label = "Net for period",
-                                    value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
-                                    icon = Icons.Outlined.AccountBalanceWallet,
-                                    supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
-                                    containerColor = colors.tints.blue.base,
-                                    valueColor = netColor
-                                )
-                            }
+                            tasksTile(Modifier.weight(1f))
+                            habitsTile(Modifier.weight(1f))
                         }
+                        netTile(Modifier.fillMaxWidth())
                     }
                 }
             }
         }
 
-        // 5. Task Completion Container Panel (Pill Bar Chart with Ghost Empty State)
-        item {
-            val estimateLine = currentTaskSummary.totalEstimatedMinutes?.let {
-                " • Planned estimate: ${DateAttributionPolicy.formatMinutes(it)}"
-            } ?: ""
-            LaContainerPanel(
-                title = "Task completion",
-                subtitle = "${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} planned tasks completed$estimateLine"
-            ) {
-                LaPillBarChart(
-                    entries = taskBarEntries,
-                    selectedIndex = selectedTaskBarIdx.coerceIn(0, (taskBarEntries.size - 1).coerceAtLeast(0)),
-                    onSelectIndex = { selectedTaskBarIdx = it },
-                    barTint = colors.tints.lavender,
-                    chartHeight = 132.dp,
-                    emptyMessage = "No tasks planned in this period",
-                    accessibilitySummary = "Task completion chart: ${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} tasks completed."
+        // 5. Level C Period-Empty Consolidation (v1.3 Rule 4C)
+        if (isPeriodCompletelyEmpty) {
+            item {
+                LaPeriodEmptyCard(
+                    icon = Icons.Outlined.BarChart,
+                    title = "No activity recorded in this period",
+                    message = "Complete tasks, log focus sessions, check off habits, or record finance entries to populate your period comparisons and charts.",
+                    chipColor = colors.tints.lavender.soft
                 )
             }
-        }
+        } else {
+            // Task Completion section: full chart if tasks exist, else 1-line collapsed row (Rule 4C)
+            item {
+                if (!currentTaskSummary.hasTasks) {
+                    LaCollapsedEmptyRow(
+                        sectionTitle = "Task completion",
+                        emptyText = "no tasks planned in this period",
+                        icon = Icons.AutoMirrored.Outlined.EventNote
+                    )
+                } else {
+                    val estimateLine = currentTaskSummary.totalEstimatedMinutes?.let {
+                        " • Planned estimate: ${DateAttributionPolicy.formatMinutes(it)}"
+                    } ?: ""
+                    LaContainerPanel(
+                        title = "Task completion",
+                        subtitle = "${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} planned tasks completed$estimateLine"
+                    ) {
+                        LaPillBarChart(
+                            entries = taskBarEntries,
+                            selectedIndex = selectedTaskBarIdx.coerceIn(0, (taskBarEntries.size - 1).coerceAtLeast(0)),
+                            onSelectIndex = { selectedTaskBarIdx = it },
+                            barTint = colors.tints.lavender,
+                            chartHeight = 124.dp,
+                            emptyMessage = "",
+                            accessibilitySummary = "Task completion chart: ${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} tasks completed."
+                        )
+                    }
+                }
+            }
 
-        // 6. Habit Consistency Container Panel (Heat Tiles + Per-Habit Track Bars)
-        item {
-            HabitsInsightsContainer(
-                habitPeriodSummary = currentHabitSummary,
-                heatCells = heatCells,
-                butterTint = colors.tints.butter
-            )
-        }
+            // Habit Consistency section: full heat calendar + track bars if due habits exist, else 1-line collapsed row
+            item {
+                if (currentHabitSummary.totalDueOccurrences == 0) {
+                    LaCollapsedEmptyRow(
+                        sectionTitle = "Habit consistency",
+                        emptyText = "no data yet",
+                        icon = Icons.Outlined.Repeat
+                    )
+                } else {
+                    HabitsInsightsContainer(
+                        habitPeriodSummary = currentHabitSummary,
+                        heatCells = heatCells,
+                        butterTint = colors.tints.butter
+                    )
+                }
+            }
 
-        // 7. Finance Summary Container Panel (Category Ring + Inflow/Outflow Track Bars)
-        item {
-            FinanceInsightsContainer(
-                financeSummary = currentFinanceSummary,
-                currencyCode = currencyCode
-            )
+            // Finance Summary section: full chart if transactions exist, else 1-line collapsed row
+            item {
+                if (!currentFinanceSummary.hasTransactions) {
+                    LaCollapsedEmptyRow(
+                        sectionTitle = "Finance summary",
+                        emptyText = "no transactions in this period",
+                        icon = Icons.Outlined.AccountBalanceWallet
+                    )
+                } else {
+                    FinanceInsightsContainer(
+                        financeSummary = currentFinanceSummary,
+                        currencyCode = currencyCode
+                    )
+                }
+            }
         }
     }
 }

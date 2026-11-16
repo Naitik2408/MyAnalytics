@@ -55,6 +55,8 @@ data class LaTypeScale(
     val timerValue: TextStyle,
     // Section headings ("Today's Tasks", "This week") (17 sp, Semibold 600)
     val sectionTitle: TextStyle,
+    // Card / sheet item title (16 sp, Semibold 600)
+    val cardTitle: TextStyle = sectionTitle,
     // Main content and descriptions (15 sp, Regular 400)
     val body: TextStyle,
     // Emphasised body / button labels (15 sp, SemiBold 600)
@@ -69,9 +71,9 @@ val DefaultLaTypeScale = LaTypeScale(
     editorialHeadline = TextStyle(
         fontFamily = UrbanistFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 35.sp,
-        lineHeight = 38.sp,
-        letterSpacing = (-0.35).sp
+        fontSize = 26.sp,
+        lineHeight = 30.sp,
+        letterSpacing = (-0.26).sp
     ),
     screenTitle = TextStyle(
         fontFamily = UrbanistFontFamily,
@@ -82,21 +84,22 @@ val DefaultLaTypeScale = LaTypeScale(
     metricValue = TextStyle(
         fontFamily = UrbanistFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
-        lineHeight = 34.sp,
+        fontSize = 28.sp,
+        lineHeight = 32.sp,
         fontFeatureSettings = "tnum"
     ),
     metricEmptyValue = TextStyle(
         fontFamily = UrbanistFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
-        lineHeight = 22.sp
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        fontFeatureSettings = "tnum"
     ),
     timerValue = TextStyle(
         fontFamily = UrbanistFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 48.sp,
-        lineHeight = 54.sp,
+        fontSize = 52.sp,
+        lineHeight = 58.sp,
         fontFeatureSettings = "tnum"
     ),
     sectionTitle = TextStyle(
@@ -104,6 +107,12 @@ val DefaultLaTypeScale = LaTypeScale(
         fontWeight = FontWeight.SemiBold,
         fontSize = 17.sp,
         lineHeight = 23.sp
+    ),
+    cardTitle = TextStyle(
+        fontFamily = UrbanistFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp
     ),
     body = TextStyle(
         fontFamily = UrbanistFontFamily,
@@ -148,11 +157,12 @@ data class LaSpacing(
     val tileGutter: Dp = 12.dp,
     val tilePadding: Dp = 16.dp,
     val heroPadding: Dp = 20.dp,
+    val cardPaddingLarge: Dp = 20.dp,
     val sectionGap: Dp = 24.dp,
     val dockHeight: Dp = 68.dp,
     val dockBottomMargin: Dp = 14.dp,
-    // Total bottom content padding so scrollable content clears the floating dock cleanly
-    val dockBottomClearance: Dp = 104.dp
+    // Total bottom content padding so scrollable content clears the floating dock and its 32 dp scrim cleanly
+    val dockBottomClearance: Dp = 128.dp
 )
 
 // Section 6.2 Corner Radius Tokens

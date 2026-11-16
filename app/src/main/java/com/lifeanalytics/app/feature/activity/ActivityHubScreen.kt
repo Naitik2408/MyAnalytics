@@ -266,8 +266,9 @@ fun ActivityHubScreen(
                         }
                     }
 
-                    // 2-Column Bento Row: Daily Planning (lavender) + Daily Habits (butter)
+                    // 2-Column Bento Row: Daily Planning (lavender) + Daily Habits (butter) (Rule 6: 0 instead of 0 / 0 or 0 due)
                     val allTasksDone = taskSummary.hasTasks && taskSummary.completedCount == taskSummary.totalCount
+                    val taskMetricText = if (taskSummary.hasTasks) taskSummary.completionRatioText else "0"
                     val taskStatusText = if (taskSummary.hasTasks) {
                         "${taskSummary.completedCount} of ${taskSummary.totalCount} done"
                     } else {
@@ -276,8 +277,13 @@ fun ActivityHubScreen(
 
                     val allHabitsDone = habitSummary.hasDueHabits &&
                         habitSummary.completedDueCount == habitSummary.totalDueCount
+                    val habitMetricText = if (habitSummary.hasDueHabits) {
+                        "${habitSummary.completedDueCount} / ${habitSummary.totalDueCount}"
+                    } else {
+                        "0"
+                    }
                     val habitStatusText = when {
-                        allHabits.isEmpty() -> "No habits created"
+                        allHabits.isEmpty() -> "No habits scheduled"
                         habitSummary.hasDueHabits -> "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due done"
                         else -> "None due today"
                     }
@@ -285,7 +291,8 @@ fun ActivityHubScreen(
                     if (stackColumns) {
                         BentoModuleCard(
                             title = "Daily Planning",
-                            metricValue = taskSummary.completionRatioText,
+                            metricValue = taskMetricText,
+                            isEmptyMetric = !taskSummary.hasTasks,
                             statusText = taskStatusText,
                             isCompleted = allTasksDone,
                             icon = Icons.AutoMirrored.Outlined.EventNote,
@@ -294,11 +301,8 @@ fun ActivityHubScreen(
                         )
                         BentoModuleCard(
                             title = "Daily Habits",
-                            metricValue = if (habitSummary.hasDueHabits) {
-                                "${habitSummary.completedDueCount} / ${habitSummary.totalDueCount}"
-                            } else {
-                                "0 due"
-                            },
+                            metricValue = habitMetricText,
+                            isEmptyMetric = !habitSummary.hasDueHabits,
                             statusText = habitStatusText,
                             isCompleted = allHabitsDone,
                             icon = Icons.Outlined.Repeat,
@@ -312,7 +316,8 @@ fun ActivityHubScreen(
                         ) {
                             BentoModuleCard(
                                 title = "Daily Planning",
-                                metricValue = taskSummary.completionRatioText,
+                                metricValue = taskMetricText,
+                                isEmptyMetric = !taskSummary.hasTasks,
                                 statusText = taskStatusText,
                                 isCompleted = allTasksDone,
                                 icon = Icons.AutoMirrored.Outlined.EventNote,
@@ -322,11 +327,8 @@ fun ActivityHubScreen(
                             )
                             BentoModuleCard(
                                 title = "Daily Habits",
-                                metricValue = if (habitSummary.hasDueHabits) {
-                                    "${habitSummary.completedDueCount} / ${habitSummary.totalDueCount}"
-                                } else {
-                                    "0 due"
-                                },
+                                metricValue = habitMetricText,
+                                isEmptyMetric = !habitSummary.hasDueHabits,
                                 statusText = habitStatusText,
                                 isCompleted = allHabitsDone,
                                 icon = Icons.Outlined.Repeat,
@@ -388,13 +390,11 @@ fun ActivityHubScreen(
             }
         }
 
-        // 4. Today's Session Timeline (Section 11.2)
+        // 4. Today's Session Timeline (Section 11.2 & Step 2 Activity: concise subtitle, no duplicate Open timer link)
         item {
             LaContainerPanel(
                 title = "Today's focus timeline",
-                subtitle = "Recorded focus intervals across the 24-hour day (paused time excluded)",
-                actionLabel = "Open timer",
-                onActionClick = onOpenFocus
+                subtitle = "Today's sessions, excluding pauses"
             ) {
                 LaSessionTimeline(
                     segments = timelineSegments,
@@ -411,6 +411,7 @@ fun ActivityHubScreen(
 private fun BentoModuleCard(
     title: String,
     metricValue: String,
+    isEmptyMetric: Boolean,
     statusText: String,
     isCompleted: Boolean,
     icon: ImageVector,
@@ -423,7 +424,9 @@ private fun BentoModuleCard(
     LaTintedTile(
         containerColor = containerColor,
         onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .height(152.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -440,7 +443,7 @@ private fun BentoModuleCard(
                 onTintedSurface = true
             )
         }
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = title,
             style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
@@ -449,10 +452,14 @@ private fun BentoModuleCard(
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = metricValue,
-            style = LaTheme.typography.metricValue,
-            color = colors.textPrimary
+            style = if (isEmptyMetric) {
+                LaTheme.typography.metricEmptyValue
+            } else {
+                LaTheme.typography.metricValue
+            },
+            color = if (isEmptyMetric) colors.onTintSecondary else colors.textPrimary
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         StatusPillRow(
             text = statusText,
             isCompleted = isCompleted

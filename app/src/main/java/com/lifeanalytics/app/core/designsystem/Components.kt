@@ -33,12 +33,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.NorthEast
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -355,9 +361,10 @@ fun LaIconChip(
     onTintedSurface: Boolean = true,
     iconTint: Color = LaTheme.colors.textPrimary,
     containerColor: Color? = null,
+    backgroundColor: Color? = null,
     size: Dp = 38.dp
 ) {
-    val resolvedContainer = containerColor ?: if (onTintedSurface) {
+    val resolvedContainer = backgroundColor ?: containerColor ?: if (onTintedSurface) {
         if (LaTheme.colors.isDark) {
             LaTheme.colors.surface.copy(alpha = 0.72f)
         } else {
@@ -384,19 +391,21 @@ fun LaIconChip(
 }
 
 // -----------------------------------------------------------------------------
-// 9.2 Tiles and Panels (Borderless tonal separation)
+// 9.2 Tiles, Micro-Visuals, and Panels (Borderless tonal separation)
 // -----------------------------------------------------------------------------
 
-private fun isTextStateValue(value: String): Boolean {
+private fun isTextStateOrZeroEmptyValue(value: String): Boolean {
     val trimmed = value.trim()
     if (trimmed.isEmpty()) return true
+    if (trimmed in setOf("0", "0m", "0h 0m", "₹0", "—", "No data", "No due days")) return true
     return !trimmed.any { it.isDigit() }
 }
 
 /**
- * Signature Detail #10 & Section 9.2: Stat tile pattern
+ * Signature Detail #10 & v1.3 Rules 2, 6, 8: Stat tile pattern
  * Top row = icon chip (left) + optional arrow/action (right)
  * Small label -> Big numeric value (or balanced empty-value text style) -> optional micro-visual.
+ * Normalizes "0 / 0" to "0" per Rule 6.
  */
 @Composable
 fun LaStatTile(
@@ -408,30 +417,41 @@ fun LaStatTile(
     containerColor: Color = LaTheme.colors.surface,
     onTintedSurface: Boolean = containerColor != LaTheme.colors.surface,
     valueColor: Color = LaTheme.colors.textPrimary,
+    isEmptyValue: Boolean = false,
+    minHeight: Dp = 0.dp,
     onClick: (() -> Unit)? = null,
     microVisual: (@Composable () -> Unit)? = null
 ) {
+    val normalizedValue = if (value.trim() == "0 / 0") "0" else value
     val secondaryColor = if (onTintedSurface) {
         LaTheme.colors.onTintSecondary
     } else {
         LaTheme.colors.textSecondary
     }
-    val useEmptyTextStyle = isTextStateValue(value)
+    val useEmptyTextStyle = isEmptyValue || isTextStateOrZeroEmptyValue(normalizedValue)
+
+    val heightMod = if (minHeight > 0.dp) {
+        Modifier.defaultMinSize(minHeight = minHeight)
+    } else {
+        Modifier
+    }
 
     val tileModifier = if (onClick != null) {
         modifier
+            .then(heightMod)
             .clip(LaTheme.radii.shapeMd)
             .background(containerColor)
             .semantics(mergeDescendants = true) {
-                contentDescription = "$label: $value${supportingText?.let { ", $it" } ?: ""}"
+                contentDescription = "$label: $normalizedValue${supportingText?.let { ", $it" } ?: ""}"
             }
             .pressScaleClickable(onClick = onClick)
     } else {
         modifier
+            .then(heightMod)
             .clip(LaTheme.radii.shapeMd)
             .background(containerColor)
             .semantics(mergeDescendants = true) {
-                contentDescription = "$label: $value${supportingText?.let { ", $it" } ?: ""}"
+                contentDescription = "$label: $normalizedValue${supportingText?.let { ", $it" } ?: ""}"
             }
     }
 
@@ -463,7 +483,7 @@ fun LaStatTile(
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         Column {
@@ -476,7 +496,7 @@ fun LaStatTile(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = value,
+                text = normalizedValue,
                 style = if (useEmptyTextStyle) {
                     LaTheme.typography.metricEmptyValue
                 } else {
@@ -495,8 +515,101 @@ fun LaStatTile(
         }
 
         if (microVisual != null) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             microVisual()
+        }
+    }
+}
+
+/**
+ * v1.3 Rule 8: Micro progress bar inside a stat tile when data > 0.
+ */
+@Composable
+fun LaMicroProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    trackColor: Color = LaTheme.colors.surface.copy(alpha = 0.65f),
+    fillColor: Color = LaTheme.colors.ink
+) {
+    val clamped = progress.coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(CircleShape)
+            .background(trackColor)
+    ) {
+        if (clamped > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(clamped.coerceAtLeast(0.08f))
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(fillColor)
+            )
+        }
+    }
+}
+
+/**
+ * v1.3 Rule 8: 5-7 mini vertical pill bars inside a stat tile when data > 0.
+ */
+@Composable
+fun LaMicroPills(
+    fractions: List<Float>,
+    modifier: Modifier = Modifier,
+    pillColor: Color = LaTheme.colors.ink.copy(alpha = 0.65f),
+    highlightColor: Color = LaTheme.colors.ink,
+    highlightIndex: Int = fractions.lastIndex
+) {
+    val maxVal = (fractions.maxOrNull() ?: 1f).coerceAtLeast(0.01f)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(22.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        fractions.forEachIndexed { idx, v ->
+            val fraction = if (v <= 0f) 0.22f else (v / maxVal).coerceIn(0.28f, 1f)
+            val color = when {
+                v <= 0f -> pillColor.copy(alpha = 0.25f)
+                idx == highlightIndex -> highlightColor
+                else -> pillColor
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height((22.dp * fraction).coerceAtLeast(5.dp))
+                    .clip(CircleShape)
+                    .background(color)
+            )
+        }
+    }
+}
+
+/**
+ * v1.3 Rule 8: 7-day completion dot strip inside a habit stat tile when data > 0.
+ */
+@Composable
+fun LaMicroDots(
+    states: List<Boolean>,
+    modifier: Modifier = Modifier,
+    activeColor: Color = LaTheme.colors.ink,
+    inactiveColor: Color = LaTheme.colors.surface.copy(alpha = 0.65f)
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        states.take(7).forEach { done ->
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (done) activeColor else inactiveColor)
+            )
         }
     }
 }
@@ -658,6 +771,7 @@ fun LaFilterChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
     selectedColor: Color = LaTheme.colors.tints.lavender.strong
 ) {
     val bgColor by animateColorAsState(
@@ -671,7 +785,7 @@ fun LaFilterChip(
         Modifier.border(1.dp, LaTheme.colors.outline, LaTheme.radii.shapeFull)
     }
 
-    Box(
+    Row(
         modifier = modifier
             .defaultMinSize(minHeight = 40.dp)
             .clip(LaTheme.radii.shapeFull)
@@ -680,8 +794,18 @@ fun LaFilterChip(
             .semantics { this.selected = selected }
             .pressScaleClickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
-        contentAlignment = Alignment.Center
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = LaTheme.colors.textPrimary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
         Text(
             text = label,
             style = LaTheme.typography.label.copy(
@@ -863,90 +987,111 @@ fun LaFloatingDock(
 ) {
     val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val shadowColor = LaTheme.colors.ink.copy(alpha = if (LaTheme.colors.isDark) 0.35f else 0.12f)
+    val canvasColor = LaTheme.colors.canvas
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = LaTheme.spacing.screenInset,
-                end = LaTheme.spacing.screenInset,
-                bottom = navBarInset + LaTheme.spacing.dockBottomMargin
-            ),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier.fillMaxWidth()
     ) {
-        Row(
+        // v1.3 Rule 3: 32 dp vertical fade scrim from canvas (0%) to canvas (92%) directly above the dock
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(LaTheme.spacing.dockHeight)
-                .shadow(
-                    elevation = 16.dp,
-                    shape = LaTheme.radii.shapeFull,
-                    ambientColor = shadowColor,
-                    spotColor = shadowColor
+                .height(32.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            canvasColor.copy(alpha = 0f),
+                            canvasColor.copy(alpha = 0.92f)
+                        )
+                    )
                 )
-                .clip(LaTheme.radii.shapeFull)
-                .background(LaTheme.colors.surface)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            items.forEach { item ->
-                val isSelected = currentRoute == item.route
-                val pillBg by animateColorAsState(
-                    targetValue = if (isSelected) LaTheme.colors.ink else Color.Transparent,
-                    animationSpec = tween(200),
-                    label = "dock_pill_bg"
-                )
-                val iconColor by animateColorAsState(
-                    targetValue = if (isSelected) {
-                        LaTheme.colors.onInk
-                    } else {
-                        LaTheme.colors.textPrimary.copy(alpha = 0.7f)
-                    },
-                    animationSpec = tween(200),
-                    label = "dock_icon_color"
-                )
-                val labelColor by animateColorAsState(
-                    targetValue = if (isSelected) {
-                        LaTheme.colors.onInk
-                    } else {
-                        LaTheme.colors.textSecondary
-                    },
-                    animationSpec = tween(200),
-                    label = "dock_label_color"
-                )
+        )
 
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .defaultMinSize(minWidth = 48.dp, minHeight = 52.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(pillBg)
-                        .semantics {
-                            this.selected = isSelected
-                            this.contentDescription = item.label
-                        }
-                        .pressScaleClickable { onItemSelected(item) }
-                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = null,
-                        tint = iconColor,
-                        modifier = Modifier.size(21.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(canvasColor.copy(alpha = 0.94f))
+                .padding(
+                    start = LaTheme.spacing.screenInset,
+                    end = LaTheme.spacing.screenInset,
+                    bottom = navBarInset + LaTheme.spacing.dockBottomMargin
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(LaTheme.spacing.dockHeight)
+                    .shadow(
+                        elevation = 24.dp,
+                        shape = LaTheme.radii.shapeFull,
+                        ambientColor = shadowColor,
+                        spotColor = shadowColor
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.label,
-                        style = LaTheme.typography.chartMicroLabel.copy(
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-                        ),
-                        color = labelColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    .clip(LaTheme.radii.shapeFull)
+                    .background(LaTheme.colors.surface)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.forEach { item ->
+                    val isSelected = currentRoute == item.route
+                    val pillBg by animateColorAsState(
+                        targetValue = if (isSelected) LaTheme.colors.ink else Color.Transparent,
+                        animationSpec = tween(200),
+                        label = "dock_pill_bg"
                     )
+                    val iconColor by animateColorAsState(
+                        targetValue = if (isSelected) {
+                            LaTheme.colors.onInk
+                        } else {
+                            LaTheme.colors.textPrimary.copy(alpha = 0.72f)
+                        },
+                        animationSpec = tween(200),
+                        label = "dock_icon_color"
+                    )
+                    val labelColor by animateColorAsState(
+                        targetValue = if (isSelected) {
+                            LaTheme.colors.onInk
+                        } else {
+                            LaTheme.colors.textSecondary
+                        },
+                        animationSpec = tween(200),
+                        label = "dock_label_color"
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minWidth = 48.dp, minHeight = 52.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(pillBg)
+                            .semantics {
+                                this.selected = isSelected
+                                this.contentDescription = item.label
+                            }
+                            .pressScaleClickable { onItemSelected(item) }
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = null,
+                            tint = iconColor,
+                            modifier = Modifier.size(21.dp)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = item.label,
+                            style = LaTheme.typography.chartMicroLabel.copy(
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                            ),
+                            color = labelColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -1169,7 +1314,241 @@ fun LaScreenHeader(
 }
 
 // -----------------------------------------------------------------------------
-// Backwards-compatible wrappers upgraded to v1.2 visual language
+// Section 14.1 (v1.3 Rule 4): 3-Level Empty-State System
+// -----------------------------------------------------------------------------
+
+/**
+ * Level A — First-run "Get started" card on Home when all modules are empty.
+ */
+@Composable
+fun LaFirstRunChecklistCard(
+    onAddFirstTask: () -> Unit,
+    onPickDailyHabit: () -> Unit,
+    onStartFocusSession: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LaContainerPanel(
+        title = "Get started",
+        subtitle = "Three quick steps to set up your daily rhythm.",
+        modifier = modifier
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FirstRunStepRow(
+                stepNumber = "1",
+                title = "Add your first task",
+                subtitle = "Plan what matters today",
+                icon = Icons.Outlined.EventNote,
+                chipBg = LaTheme.colors.tints.lavender.soft,
+                onClick = onAddFirstTask
+            )
+            FirstRunStepRow(
+                stepNumber = "2",
+                title = "Pick one daily habit",
+                subtitle = "Track a simple recurring routine",
+                icon = Icons.Outlined.Repeat,
+                chipBg = LaTheme.colors.tints.butter.soft,
+                onClick = onPickDailyHabit
+            )
+            FirstRunStepRow(
+                stepNumber = "3",
+                title = "Start a 25-min focus session",
+                subtitle = "Record uninterrupted work",
+                icon = Icons.Outlined.Timer,
+                chipBg = LaTheme.colors.tints.mint.soft,
+                onClick = onStartFocusSession
+            )
+        }
+    }
+}
+
+@Composable
+private fun FirstRunStepRow(
+    stepNumber: String,
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    chipBg: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(LaTheme.radii.shapeSm)
+            .background(LaTheme.colors.surfaceVariant.copy(alpha = 0.55f))
+            .pressScaleClickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LaIconChip(
+                icon = icon,
+                backgroundColor = chipBg,
+                size = 38.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "$stepNumber. $title",
+                    style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = LaTheme.colors.textPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = LaTheme.typography.chartMicroLabel,
+                    color = LaTheme.colors.textSecondary
+                )
+            }
+        }
+        Icon(
+            imageVector = Icons.Outlined.ChevronRight,
+            contentDescription = title,
+            tint = LaTheme.colors.textSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
+ * Level B — Module empty state inside a container panel.
+ * One module-specific icon chip, one title line, one sentence, one button.
+ * Never nests a tinted box inside a white card.
+ */
+@Composable
+fun LaModuleEmptyState(
+    icon: ImageVector,
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onActionClick: (() -> Unit)? = null,
+    chipColor: Color = LaTheme.colors.tints.lavender.soft,
+    iconTint: Color? = null
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LaIconChip(
+                icon = icon,
+                backgroundColor = iconTint ?: chipColor,
+                size = 40.dp
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = LaTheme.colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = message,
+                    style = LaTheme.typography.label,
+                    color = LaTheme.colors.textSecondary
+                )
+            }
+        }
+        if (actionLabel != null && onActionClick != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            LaSecondaryButton(
+                text = actionLabel,
+                onClick = onActionClick,
+                containerColor = LaTheme.colors.surfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Level C — Consolidated period-empty card for Insights or Finance when an entire period has no data.
+ */
+@Composable
+fun LaPeriodEmptyCard(
+    icon: ImageVector,
+    title: String,
+    message: String,
+    actionLabel: String? = null,
+    onActionClick: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryActionClick: (() -> Unit)? = null,
+    chipColor: Color = LaTheme.colors.tints.lavender.soft,
+    modifier: Modifier = Modifier
+) {
+    LaContainerPanel(modifier = modifier) {
+        LaModuleEmptyState(
+            icon = icon,
+            title = title,
+            message = message,
+            actionLabel = actionLabel,
+            onActionClick = onActionClick,
+            chipColor = chipColor
+        )
+        if (secondaryActionLabel != null && onSecondaryActionClick != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            LaTextButton(
+                text = secondaryActionLabel,
+                onClick = onSecondaryActionClick
+            )
+        }
+    }
+}
+
+/**
+ * Level C (partial data) — Collapsed one-line row when only some sections lack data
+ * (e.g. "Habit consistency — no data yet").
+ */
+@Composable
+fun LaCollapsedEmptyRow(
+    sectionTitle: String,
+    emptyText: String = "no data yet",
+    icon: ImageVector? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(LaTheme.radii.shapeMd)
+            .background(LaTheme.colors.surface)
+            .padding(horizontal = LaTheme.spacing.tilePadding, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = LaTheme.colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Text(
+                text = "$sectionTitle — $emptyText",
+                style = LaTheme.typography.body,
+                color = LaTheme.colors.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Backwards-compatible wrappers upgraded to v1.3 visual language
 // -----------------------------------------------------------------------------
 
 @Composable
@@ -1280,62 +1659,19 @@ fun EmptyStateCard(
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onActionClick: (() -> Unit)? = null,
+    icon: ImageVector = Icons.Outlined.EventNote,
     tintSoftColor: Color = LaTheme.colors.tints.lavender.soft,
-    ghostVisual: (@Composable () -> Unit)? = null
+    @Suppress("UNUSED_PARAMETER") ghostVisual: (@Composable () -> Unit)? = null
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(LaTheme.radii.shapeMd)
-            .background(tintSoftColor.copy(alpha = 0.65f))
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (ghostVisual != null) {
-            ghostVisual()
-            Spacer(modifier = Modifier.height(12.dp))
-        } else {
-            // Subtle ghost capsule visual (Section 11.4)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.height(36.dp)
-            ) {
-                listOf(18.dp, 30.dp, 22.dp, 34.dp, 16.dp).forEach { h ->
-                    Box(
-                        modifier = Modifier
-                            .width(12.dp)
-                            .height(h)
-                            .clip(CircleShape)
-                            .background(LaTheme.colors.ink.copy(alpha = 0.10f))
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        Text(
-            text = title,
-            style = LaTheme.typography.sectionTitle,
-            color = LaTheme.colors.textPrimary,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = message,
-            style = LaTheme.typography.body,
-            color = LaTheme.colors.onTintSecondary,
-            textAlign = TextAlign.Center
-        )
-        if (actionLabel != null && onActionClick != null) {
-            Spacer(modifier = Modifier.height(14.dp))
-            LaSecondaryButton(
-                text = actionLabel,
-                onClick = onActionClick,
-                containerColor = LaTheme.colors.surface
-            )
-        }
-    }
+    LaModuleEmptyState(
+        icon = icon,
+        title = title,
+        message = message,
+        modifier = modifier,
+        actionLabel = actionLabel,
+        onActionClick = onActionClick,
+        chipColor = tintSoftColor
+    )
 }
 
 @Composable

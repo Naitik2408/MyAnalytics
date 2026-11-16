@@ -621,6 +621,7 @@ fun LaMiniHeatCalendar(
     accessibilitySummary: String
 ) {
     val colors = LaTheme.colors
+    val allEmpty = cells.all { it.intensityLevel <= 0 }
     val rows = cells.chunked(7)
 
     Column(
@@ -635,16 +636,18 @@ fun LaMiniHeatCalendar(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 rowCells.forEach { cell ->
-                    val cellBg = when (cell.intensityLevel) {
-                        0 -> colors.surfaceVariant.copy(alpha = 0.55f)
-                        1 -> tint.soft
-                        2 -> tint.base
-                        3 -> tint.strong
+                    val cellBg = when {
+                        allEmpty -> colors.surfaceVariant.copy(alpha = 0.38f)
+                        cell.intensityLevel <= 0 -> colors.surfaceVariant.copy(alpha = 0.55f)
+                        cell.intensityLevel == 1 -> tint.soft
+                        cell.intensityLevel == 2 -> tint.base
+                        cell.intensityLevel == 3 -> tint.strong
                         else -> colors.ink
                     }
-                    val textCol = when (cell.intensityLevel) {
-                        0 -> colors.textSecondary
-                        4 -> colors.onInk
+                    val textCol = when {
+                        allEmpty -> colors.textSecondary.copy(alpha = 0.45f)
+                        cell.intensityLevel <= 0 -> colors.textSecondary
+                        cell.intensityLevel >= 4 -> colors.onInk
                         else -> colors.textPrimary
                     }
                     Box(
