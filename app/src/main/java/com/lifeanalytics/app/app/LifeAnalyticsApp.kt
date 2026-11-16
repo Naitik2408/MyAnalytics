@@ -37,6 +37,7 @@ import com.lifeanalytics.app.feature.habits.DailyHabitsScreen
 import com.lifeanalytics.app.feature.home.HomeDashboardScreen
 import com.lifeanalytics.app.feature.insights.InsightsScreen
 import com.lifeanalytics.app.feature.planning.DailyPlanningScreen
+import com.lifeanalytics.app.data.backup.BackupManager
 import com.lifeanalytics.app.feature.review.DailyReviewScreen
 import com.lifeanalytics.app.feature.settings.SettingsScreen
 import java.time.LocalDate
@@ -56,7 +57,8 @@ enum class PrimaryDestination(
 fun LifeAnalyticsApp(
     repository: LifeAnalyticsRepository,
     preferencesRepository: PreferencesRepository,
-    preferences: AppPreferences
+    preferences: AppPreferences,
+    backupManager: BackupManager? = null
 ) {
     val colors = LaTheme.colors
     val navController = rememberNavController()
@@ -208,6 +210,7 @@ fun LifeAnalyticsApp(
                     preferences = preferences,
                     preferencesRepository = preferencesRepository,
                     repository = repository,
+                    backupManager = backupManager,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

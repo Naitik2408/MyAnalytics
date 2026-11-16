@@ -2,10 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-      V1 Permission Minimization Policy (docs/12_TECHNICAL_ARCHITECTURE.md):
-      No network, storage, camera, microphone, location, contacts, or exact-alarm
-      permissions are declared for V1 local-first operation.
+      V1.1 Permission Minimization Policy (docs/12_TECHNICAL_ARCHITECTURE.md):
+      - Local Room/DataStore operations work 100% offline.
+      - INTERNET and ACCESS_NETWORK_STATE are declared solely for user-initiated
+        and user-enabled encrypted Supabase Cloud Backup & Restore.
+      - No storage, camera, microphone, location, contacts, or exact-alarm
+        permissions are declared.
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".LifeAnalyticsApplication"
@@ -25,6 +30,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".data.backup.DailyBackupAlarmReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

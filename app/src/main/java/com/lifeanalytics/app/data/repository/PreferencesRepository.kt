@@ -45,4 +45,12 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             prefs[Keys.CURRENCY_CODE] = valid
         }
     }
+
+    suspend fun restorePreferences(preferences: AppPreferences) {
+        val validCurrency = SupportedCurrency.fromCode(preferences.currencyCode).code
+        dataStore.edit { prefs ->
+            prefs[Keys.THEME_OPTION] = preferences.themeOption.name
+            prefs[Keys.CURRENCY_CODE] = validCurrency
+        }
+    }
 }

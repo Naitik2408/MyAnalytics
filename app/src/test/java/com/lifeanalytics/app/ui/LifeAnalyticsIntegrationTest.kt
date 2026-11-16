@@ -246,6 +246,9 @@ class LifeAnalyticsIntegrationTest {
             PackageManager.GET_PERMISSIONS
         )
         val requested = packageInfo.requestedPermissions?.toSet().orEmpty()
+        // V1.1 Permission Policy:
+        // - INTERNET and ACCESS_NETWORK_STATE are approved and declared solely for user-initiated Supabase Cloud Backup & Restore.
+        // - Sensitive device permissions (camera, mic, location, contacts, storage) remain strictly forbidden.
         val forbidden = setOf(
             android.Manifest.permission.CAMERA,
             android.Manifest.permission.RECORD_AUDIO,
@@ -253,12 +256,11 @@ class LifeAnalyticsIntegrationTest {
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
             android.Manifest.permission.READ_CONTACTS,
             android.Manifest.permission.READ_EXTERNAL_STORAGE,
-            android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-            android.Manifest.permission.INTERNET
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
         for (perm in forbidden) {
             assertFalse("Manifest must not request $perm", requested.contains(perm))
         }
-        assertTrue(true)
+        assertTrue("Manifest must declare INTERNET for cloud backup", requested.contains(android.Manifest.permission.INTERNET))
     }
 }

@@ -1,9 +1,26 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+val supabaseUrl: String = localProps.getProperty("SUPABASE_URL")
+    ?: System.getenv("SUPABASE_URL")
+    ?: "https://njfaommiwnylhdowbbic.supabase.co"
+
+val supabaseAnonKey: String = localProps.getProperty("SUPABASE_ANON_KEY")
+    ?: System.getenv("SUPABASE_ANON_KEY")
+    ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qZmFvbW1pd255bGhkb3diYmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4MjUzOTIsImV4cCI6MjExMDQwMTM5Mn0.G65kSv8aBSMlb_iJmI-7Ausw9mQoZu3AxOyKcLAdSxo"
 
 android {
     namespace = "com.lifeanalytics.app"
@@ -13,8 +30,11 @@ android {
         applicationId = "com.lifeanalytics.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -43,6 +63,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {

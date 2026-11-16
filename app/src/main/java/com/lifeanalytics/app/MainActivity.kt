@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
         val app = application as LifeAnalyticsApplication
         val repository = app.repository
         val preferencesRepository = app.preferencesRepository
+        val backupManager = app.backupManager
 
         setContent {
             val preferences by preferencesRepository.preferencesFlow.collectAsState(
@@ -38,7 +39,8 @@ class MainActivity : ComponentActivity() {
                 LifeAnalyticsApp(
                     repository = repository,
                     preferencesRepository = preferencesRepository,
-                    preferences = preferences
+                    preferences = preferences,
+                    backupManager = backupManager
                 )
             }
         }
