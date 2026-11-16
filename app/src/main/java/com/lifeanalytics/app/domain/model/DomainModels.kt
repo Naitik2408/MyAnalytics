@@ -249,12 +249,12 @@ data class DailyReview(
 )
 
 enum class AppThemeOption(val displayName: String) {
-    SYSTEM("System default"),
     LIGHT("Light"),
-    DARK("Dark")
+    DARK("Dark"),
+    SYSTEM("System default")
 }
 
 data class AppPreferences(
-    val themeOption: AppThemeOption = AppThemeOption.SYSTEM,
+    val themeOption: AppThemeOption = AppThemeOption.LIGHT,
     val currencyCode: String = "INR"
 )

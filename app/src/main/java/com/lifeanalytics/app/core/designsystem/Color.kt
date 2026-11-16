@@ -4,38 +4,194 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Light Theme Tokens (docs/03_UI_UX_GUIDELINES.md Section 4.1)
-val LightPrimary = Color(0xFF6558D3)
-val LightPrimaryContainer = Color(0xFFEAE7FF)
-val LightSecondary = Color(0xFF4776C8)
-val LightBackground = Color(0xFFF7F8FC)
-val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceVariant = Color(0xFFF0F1F7)
-val LightTextPrimary = Color(0xFF202235)
-val LightTextSecondary = Color(0xFF686B7D)
-val LightOutline = Color(0xFFDCDDE8)
-val LightSuccess = Color(0xFF23865A)
-val LightWarning = Color(0xFFB7791F)
-val LightError = Color(0xFFC44752)
-val LightIncome = Color(0xFF23865A)
-val LightExpense = Color(0xFFC44752)
-val SuccessGreen = LightSuccess
+// =============================================================================
+// 03_UI_UX_GUIDELINES.md (v1.2) — Section 4: Colour System
+// =============================================================================
 
-// Dark Theme Tokens (docs/03_UI_UX_GUIDELINES.md Section 4.2)
-val DarkPrimary = Color(0xFFA69BFF)
-val DarkPrimaryContainer = Color(0xFF302A59)
-val DarkSecondary = Color(0xFF8FB5FF)
-val DarkBackground = Color(0xFF12131B)
-val DarkSurface = Color(0xFF1C1E29)
-val DarkSurfaceVariant = Color(0xFF272A38)
-val DarkTextPrimary = Color(0xFFF2F2FA)
-val DarkTextSecondary = Color(0xFFB1B3C2)
-val DarkOutline = Color(0xFF3B3E4D)
-val DarkSuccess = Color(0xFF63C995)
-val DarkWarning = Color(0xFFE5B45E)
-val DarkError = Color(0xFFF07A84)
-val DarkIncome = Color(0xFF63C995)
-val DarkExpense = Color(0xFFF07A84)
+@Immutable
+data class TintSteps(
+    val strong: Color,
+    val base: Color,
+    val soft: Color
+)
+
+@Immutable
+data class LaTints(
+    val lavender: TintSteps,
+    val mint: TintSteps,
+    val blue: TintSteps,
+    val rose: TintSteps,
+    val butter: TintSteps
+)
+
+enum class ModuleTint {
+    TASKS,
+    FOCUS,
+    HABITS,
+    FINANCE,
+    REVIEW,
+    INSIGHTS
+}
+
+@Immutable
+data class LaColorScheme(
+    val isDark: Boolean,
+    val canvas: Color,
+    val surface: Color,
+    val surfaceVariant: Color,
+    val ink: Color,
+    val onInk: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val onTintSecondary: Color,
+    val accent: Color,
+    val outline: Color,
+    val success: Color,
+    val warning: Color,
+    val error: Color,
+    val income: Color,
+    val expense: Color,
+    val tints: LaTints
+) {
+    fun tintFor(module: ModuleTint): TintSteps = when (module) {
+        ModuleTint.TASKS -> tints.lavender
+        ModuleTint.FOCUS -> tints.mint
+        ModuleTint.HABITS -> tints.butter
+        ModuleTint.FINANCE -> tints.blue
+        ModuleTint.REVIEW -> tints.rose
+        ModuleTint.INSIGHTS -> tints.lavender
+    }
+}
+
+// 4.1 & 4.2 Light Theme Tokens
+val LightLaTints = LaTints(
+    lavender = TintSteps(
+        strong = Color(0xFFD3C1F3),
+        base = Color(0xFFDDD0F7),
+        soft = Color(0xFFEFEAFC)
+    ),
+    mint = TintSteps(
+        strong = Color(0xFFC4E4D2),
+        base = Color(0xFFD5EBDF),
+        soft = Color(0xFFEAF5EF)
+    ),
+    blue = TintSteps(
+        strong = Color(0xFFC9DEF4),
+        base = Color(0xFFD9E9F8),
+        soft = Color(0xFFECF3FB)
+    ),
+    rose = TintSteps(
+        strong = Color(0xFFEBCFE0),
+        base = Color(0xFFF0DDE8),
+        soft = Color(0xFFF8EEF3)
+    ),
+    butter = TintSteps(
+        strong = Color(0xFFFFE6A8),
+        base = Color(0xFFFFEFC4),
+        soft = Color(0xFFFFF8E3)
+    )
+)
+
+val LightLaColors = LaColorScheme(
+    isDark = false,
+    canvas = Color(0xFFF4F3F9),
+    surface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFFEFEDF6),
+    ink = Color(0xFF111A1C),
+    onInk = Color(0xFFFFFFFF),
+    textPrimary = Color(0xFF111A1C),
+    textSecondary = Color(0xFF777386),
+    onTintSecondary = Color(0xFF4F4B63),
+    accent = Color(0xFF7563D8),
+    outline = Color(0xFFE2DEED),
+    success = Color(0xFF23865A),
+    warning = Color(0xFFB7791F),
+    error = Color(0xFFC44752),
+    income = Color(0xFF23865A),
+    expense = Color(0xFFC44752),
+    tints = LightLaTints
+)
+
+// 4.3 Dark Theme Tokens
+val DarkLaTints = LaTints(
+    lavender = TintSteps(
+        strong = Color(0xFF4A3F7E),
+        base = Color(0xFF3A3260),
+        soft = Color(0xFF2B2548)
+    ),
+    mint = TintSteps(
+        strong = Color(0xFF2F5A4A),
+        base = Color(0xFF24453A),
+        soft = Color(0xFF1B332B)
+    ),
+    blue = TintSteps(
+        strong = Color(0xFF2F4C70),
+        base = Color(0xFF243B57),
+        soft = Color(0xFF1B2D43)
+    ),
+    rose = TintSteps(
+        strong = Color(0xFF69405A),
+        base = Color(0xFF503046),
+        soft = Color(0xFF3B2434)
+    ),
+    butter = TintSteps(
+        strong = Color(0xFF6A5726),
+        base = Color(0xFF51431E),
+        soft = Color(0xFF3B3116)
+    )
+)
+
+val DarkLaColors = LaColorScheme(
+    isDark = true,
+    canvas = Color(0xFF12131B),
+    surface = Color(0xFF1C1E29),
+    surfaceVariant = Color(0xFF272A38),
+    ink = Color(0xFFEDE7FF),
+    onInk = Color(0xFF1A1630),
+    textPrimary = Color(0xFFF2F2FA),
+    textSecondary = Color(0xFFB1B3C2),
+    onTintSecondary = Color(0xFFC9C5DD),
+    accent = Color(0xFFA69BFF),
+    outline = Color(0xFF3B3E4D),
+    success = Color(0xFF63C995),
+    warning = Color(0xFFE5B45E),
+    error = Color(0xFFF07A84),
+    income = Color(0xFF63C995),
+    expense = Color(0xFFF07A84),
+    tints = DarkLaTints
+)
+
+// Legacy aliases retained so existing imports compile during transition
+val LightPrimary = LightLaColors.ink
+val LightPrimaryContainer = LightLaTints.lavender.soft
+val LightSecondary = LightLaColors.accent
+val LightBackground = LightLaColors.canvas
+val LightSurface = LightLaColors.surface
+val LightSurfaceVariant = LightLaColors.surfaceVariant
+val LightTextPrimary = LightLaColors.textPrimary
+val LightTextSecondary = LightLaColors.textSecondary
+val LightOutline = LightLaColors.outline
+val LightSuccess = LightLaColors.success
+val LightWarning = LightLaColors.warning
+val LightError = LightLaColors.error
+val LightIncome = LightLaColors.income
+val LightExpense = LightLaColors.expense
+val SuccessGreen = LightLaColors.success
+
+val DarkPrimary = DarkLaColors.ink
+val DarkPrimaryContainer = DarkLaTints.lavender.soft
+val DarkSecondary = DarkLaColors.accent
+val DarkBackground = DarkLaColors.canvas
+val DarkSurface = DarkLaColors.surface
+val DarkSurfaceVariant = DarkLaColors.surfaceVariant
+val DarkTextPrimary = DarkLaColors.textPrimary
+val DarkTextSecondary = DarkLaColors.textSecondary
+val DarkOutline = DarkLaColors.outline
+val DarkSuccess = DarkLaColors.success
+val DarkWarning = DarkLaColors.warning
+val DarkError = DarkLaColors.error
+val DarkIncome = DarkLaColors.income
+val DarkExpense = DarkLaColors.expense
 
 @Immutable
 data class ExtendedColors(
@@ -47,13 +203,15 @@ data class ExtendedColors(
     val textSecondary: Color
 )
 
+val LocalLaColors = staticCompositionLocalOf { LightLaColors }
+
 val LocalExtendedColors = staticCompositionLocalOf {
     ExtendedColors(
-        success = LightSuccess,
-        warning = LightWarning,
-        income = LightIncome,
-        expense = LightExpense,
-        textPrimary = LightTextPrimary,
-        textSecondary = LightTextSecondary
+        success = LightLaColors.success,
+        warning = LightLaColors.warning,
+        income = LightLaColors.income,
+        expense = LightLaColors.expense,
+        textPrimary = LightLaColors.textPrimary,
+        textSecondary = LightLaColors.textSecondary
     )
 }

@@ -82,7 +82,7 @@ class LifeAnalyticsIntegrationTest {
     @Test
     fun preferencesRepository_persistsThemeAndCurrency() = runBlocking {
         val initial = preferencesRepository.preferencesFlow.first()
-        assertEquals(AppThemeOption.SYSTEM, initial.themeOption)
+        assertEquals(AppThemeOption.LIGHT, initial.themeOption)
         assertEquals("INR", initial.currencyCode)
 
         preferencesRepository.setThemeOption(AppThemeOption.DARK)

@@ -19,13 +19,13 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     constructor(context: Context) : this(context.applicationContext.dataStore)
 
     private object Keys {
-        val THEME_OPTION = stringPreferencesKey("theme_option")
+        val THEME_OPTION = stringPreferencesKey("theme_option_v12")
         val CURRENCY_CODE = stringPreferencesKey("currency_code")
     }
 
     val preferencesFlow: Flow<AppPreferences> = dataStore.data.map { prefs ->
         val themeRaw = prefs[Keys.THEME_OPTION]
-        val theme = AppThemeOption.entries.firstOrNull { it.name == themeRaw } ?: AppThemeOption.SYSTEM
+        val theme = AppThemeOption.entries.firstOrNull { it.name == themeRaw } ?: AppThemeOption.LIGHT
         val currency = SupportedCurrency.fromCode(prefs[Keys.CURRENCY_CODE]).code
         AppPreferences(
             themeOption = theme,
