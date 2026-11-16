@@ -13,17 +13,20 @@ everyday tracking into a complicated process.
 
 ## Project status
 
-This repository contains the product and implementation documentation
-for Life Analytics V1. The documentation is being prepared before
-implementation so that the Antigravity Remote coding agent has a clear,
-consistent source of truth.
+The **Life Analytics V1** native Android application (`com.lifeanalytics.app`) is implemented in this repository following `AGENTS.md` and the 13 specifications in `docs/`.
 
-The application is intended to be developed in **Antigravity Remote**,
-built there as an Android APK, and then downloaded and installed on the
-user's Android phone for real-device testing.
+### Verified Remote Environment & Pinned Stack
 
-Do not assume that the Android project or APK already exists merely
-because this documentation exists.
+- **OS / Architecture:** Linux Debian 12 (`x86_64`)
+- **JDK:** OpenJDK `17.0.18`
+- **Gradle Wrapper:** Gradle `8.9` (`./gradlew`)
+- **Android Gradle Plugin (AGP):** `8.5.2`
+- **Kotlin / KSP:** Kotlin `2.0.20` / KSP `2.0.20-1.0.25`
+- **Android SDK:** `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26` (`build-tools;35.0.0`)
+- **UI & Navigation:** Jetpack Compose BOM `2024.09.03` (Material 3) + Navigation Compose `2.8.2`
+- **Persistence:** Room `2.6.1` (SQLite) + Jetpack DataStore Preferences `1.1.1`
+- **Testing:** JUnit `4.13.2`, Robolectric `4.13`, AndroidX Test Core `1.6.1`, Coroutines Test `1.8.1`
+- **APK Export Route:** Uploaded directly to the user's Google Drive `LifeAnalytics` folder (`1z8r1e0erRwL73qTksacSDKwi7RwsbsJH`).
 
 ## V1 product scope
 
