@@ -234,10 +234,9 @@ Typography rules:
 - Use `sp` so Android font scaling is respected; test at 130% and 150% scale.
 - 11 sp is the floor. Never go smaller.
 - Use tabular numerals for timers, durations, and amounts.
-- Use consistent number formatting and currency symbols.
+- **Number and currency formatting (Rule 7):** One formatter used everywhere. Rupee symbol `₹` only. Indian digit grouping (`₹12,34,567`). No `$` anywhere. Negative amounts use a minus sign and the expense colour plus a text/icon cue. Tabular numerals for all amounts and timers.
 - Do not communicate hierarchy using font size alone; also use weight and colour.
-- The editorial headline is a Home-only moment (one per app). Other screens use the screen title style.
-- Keep headings concise; an oversized heading must never push key data below the first screen.
+- **Header-headline rule (Rule 9):** The editorial headline is a Home-only moment (one per app) and must be 1–2 lines maximum. Combined with the greeting and week strip, the header sheet must never push the first interactive card below 300 dp from the top of the screen. Other screens use the screen title style.
 
 ## 6. Spacing, sizing, and shape
 
@@ -278,26 +277,29 @@ Typography rules:
 ### 6.3 Elevation
 
 - Use **tonal separation** first: white tiles on `canvas`, tinted tiles on `canvas` or white. No borders on tiles.
-- The only shadows: the navigation dock and bottom sheets. Style: offset y 8 dp, blur 24 dp, colour `ink` at about 10% opacity.
+- The only shadows: the navigation dock and bottom sheets. Style: offset y 8 dp, blur 24 dp, colour `ink` at about 10–12% opacity.
 - Dividers only when spacing or tonal difference is insufficient, and only inside lists.
 
 ## 7. Layout and screen structure
 
 ### 7.1 General screen structure
 
-1. **Header:** on Home, a greeting row (avatar or initial + greeting + date) with two circular utility buttons on the right. On sub-screens, a circular back button plus the screen title.
+1. **Header:** on Home, a greeting row (avatar or neutral person icon + greeting + date) with two circular utility buttons on the right. On sub-screens, a circular back button plus the screen title.
 2. **Scrollable content area** with the bento composition.
 3. **Floating navigation dock**, with enough bottom padding in the content (dock height + margin + system inset) so nothing is hidden behind it.
 4. Safe-area-aware layout: no overlap with system bars, keyboard, or gesture navigation.
 
-### 7.2 Home screen anatomy (reference for other screens)
+### 7.2 Home screen anatomy and composition rule (Rules 1, 2, 6, 8, 9)
 
-1. White **header sheet** with large bottom corners (`radius.lg`): greeting row, optional editorial headline, and the **week strip**.
-2. **Week strip:** a row of day tiles (about 52 × 64 dp, `radius.md`). Each tile shows the day name and date; today is filled with a tint and others show a soft tint. Each tile may carry a small state mark for that day (a check, a dot, or a user-recorded mood) when real data exists. Day tiles with no data stay soft and unmarked.
-3. **Hero panel** (`tint.lavender` strong, `radius.lg`): title with icon and arrow button, and one pill-bar chart of real saved data for the week, with the selected day in ink.
-4. **Bento grid** of summary tiles (the four agreed summary metrics), mixing heights.
-5. **Quick actions** (Start focus, Add task, Add expense) reachable without scrolling far.
-6. Compact previews of today's tasks and scheduled habits inside a single list container.
+- **Home composition rule (Rule 1):** On a 360 × 800 dp screen, the first viewport must show: header sheet (≤ 230 dp including the week strip), hero panel (≤ 200 dp), and the primary quick-action row. "Start focus" must be reachable without scrolling.
+- **Bento rule (Rule 2):** Summary metrics are a **2 × 2 grid** of tiles (≈ 140–160 dp tall), not full-width stacks. Do not make a full-width tile for a single small number.
+
+1. White **header sheet** with large bottom corners (`radius.lg`, ≤ 230 dp total height): greeting row, compact 1–2 line editorial headline, and the **week strip** so the first interactive card starts well above 300 dp from top.
+2. **Week strip:** a row of day tiles (about 46–52 × 60–64 dp, `radius.md`). Each tile shows the day name and date; today is filled with a tint and others show a soft tint. Each tile may carry a small state mark for that day (a check, a dot, or a user-recorded mood) when real data exists. Day tiles with no data stay soft and unmarked.
+3. **Hero panel** (`tint.lavender` strong, `radius.lg`, ≤ 200 dp height): title with icon and arrow button, and one pill-bar chart of real saved data for the week, with the selected day in ink.
+4. **Quick actions** ("Start focus" primary ink button, plus "Add task" and "Add expense" equal-width tonal buttons) immediately reachable in the first viewport without scrolling.
+5. **Bento 2 × 2 grid** of the four summary metric tiles (Tasks, Focus, Expenses, Habits, ≈ 140–160 dp tall each).
+6. Compact previews of today's tasks and scheduled habits inside list containers.
 
 ### 7.3 Responsive behaviour
 
@@ -318,8 +320,9 @@ Primary destinations:
 | Activity | Daily Planning, Active Work, and session history |
 | Insights | Daily, weekly, and monthly analytics |
 
-### 8.1 Floating dock specification
+### 8.1 Floating dock specification and Dock rule (Rule 3)
 
+- **Dock rule (Rule 3):** The dock must be visibly separated from content: soft ink-tinted shadow (y 8 dp, blur 24 dp, ≈ 10–12% opacity), plus a **scrim**: a 32 dp vertical fade from `canvas` (0%) to `canvas` (≈ 90%) directly above the dock, so cards never show through its edges. Every scrollable screen has bottom padding = dock height + margin + system inset, so the last element, and any CTA, is fully reachable and never hidden.
 - A **floating pill** (`radius.full`), `color.surface`, horizontally inset 20 dp from the screen edges, floating 12–16 dp above the bottom system inset, with the soft tinted shadow from 6.3.
 - Height about 68 dp. Four items, evenly spaced, each at least 48 dp in both dimensions.
 - **Active item:** an ink pill (or rounded rectangle, radius about 22 dp) behind the icon and label, with `onInk` icon and label.
@@ -350,11 +353,17 @@ Create reusable components so the app stays consistent. Names are conceptual.
 - **Arrow button (tile affordance):** 36–40 dp circle with a `↗` icon, translucent white on tinted tiles or `surfaceVariant` on white.
 - States: enabled, pressed (about 8% darker/lighter plus a short scale to 0.98), disabled, loading. Prevent duplicate submissions while saving.
 
-### 9.2 Tiles and panels
+### 9.2 Tiles and panels (Rules 6 and 8)
 
 Use panels to group related information, not to wrap every text element.
 
 - **Stat tile pattern:** top row = icon chip (left) and an optional secondary action such as `+` or `↗` (right); below it a small label (13–14 sp, secondary); then a large value (28–32 sp). Optional micro-visual at the bottom.
+- **Empty-value style (Rule 6):** Tiles with no data use a smaller medium-weight value style (colour `onTintSecondary`) so tile heights and baselines stay equal. Counts, durations and amounts that are truly zero show `0`, `0m`, `₹0`. A ratio with zero denominator ("0 / 0") is not shown; show `0` plus "No tasks planned" (or "No habits scheduled"). When the denominator is above zero, show the ratio (`2 / 5`) with a micro progress bar.
+- **Micro-visual rule (Rule 8):** When data exists, each summary tile carries one quiet micro-visual at its bottom:
+  - Tasks → thin progress bar.
+  - Focus → 5–7 mini pills.
+  - Expenses → mini pills or thin bar.
+  - Habits → row of dots.
 - **Hero panel:** `tint.lavender` strong, `radius.lg`, 20 dp padding. Title row (icon + label, arrow button), then one chart, then day/period labels.
 - **Container panel:** white, `radius.md`, holds lists and charts that need a title; title 16–18 sp Semibold at top-left with an optional action at top-right.
 - No borders on tiles; use tonal separation. No nested cards deeper than one level.
@@ -433,7 +442,7 @@ Charts exist to help the user understand real behaviour. They are also where thi
 - Use only for a small number (about 2–5) of meaningful parts.
 
 **Mini calendar / heat tiles**
-- Rounded squares (radius 10–12 dp, 28–32 dp size) in 3–4 lavender intensity steps. Days with no data are unfilled. A legend or label explains the scale.
+- Rounded squares (radius 10–12 dp, 28–32 dp size) in 3–4 lavender intensity steps. Days with no data are unfilled (or ghost opacity without date numbers shouting). A legend or label explains the scale.
 
 **Session timeline (for focus and activity history)**
 - Horizontal pill segments on a time ruler (tick marks every hour, labels at 11–12 sp), showing real start/end times. Paused time is not included in a session segment.
@@ -447,9 +456,10 @@ Charts exist to help the user understand real behaviour. They are also where thi
 - If it hurts scrolling performance on low-end devices, fall back to a solid `tint.strong` fill with a 1.5 dp ink-at-60% outline. Do not remove the selected-vs-other distinction.
 - Hatching also encodes difference without relying on colour alone, which helps accessibility.
 
-### 11.4 Empty and insufficient data
+### 11.4 Empty and insufficient data — Ghost chart rule (Rule 5)
 
-- Show the empty track shapes in `tint.soft` at about 50% (ghost pills or ghost ring), plus one line of plain text such as "No sessions recorded this week", plus one clear next action. No fake data, ever.
+- **Ghost chart rule (Rule 5):** Ghost charts are **uniform, flat, equal-height** pills at low opacity (≈ 40%). Never random heights that imply data. Caption text goes **above or below** the chart, never overlapping it. If a chart is empty and its container has a caption, do not draw a second message pill.
+- No fake data, ever.
 
 ### 11.5 Contrast exception for pastel fills (conscious trade-off)
 
@@ -481,10 +491,13 @@ Pastel fills on white can be below 3:1 against the background. This is allowed *
 
 Every data-driven screen defines the relevant states.
 
-**Empty state**
-- Explain what the section is for; offer one clear next action (Add task, Record expense).
-- Use the ghost shapes from 11.4 or a small purposeful vector illustration in the module's tint (not a repeated generic image).
-- Do not show fake records or fake analytics.
+### 14.1 Empty-state system — 3 levels (Rule 4)
+
+Replace ad-hoc empty cards with a strict 3-level system:
+
+- **Level A — first-run:** a single "Get started" card on Home when all modules are empty (one checklist of 3 steps: Add your first task, Pick one daily habit, Start a 25-min focus session), disappearing once any item is created.
+- **Level B — module empty:** a compact block (one icon, one title line, one sentence, one button) inside the container it belongs to. **One empty block per container.** Never put a tinted box inside a white card inside a section. Never repeat the same glyph for different modules: tasks, habits, focus, and finance each have their own icon.
+- **Level C — period empty (Insights/Finance):** when the *whole* period has no data, show **one** consolidated empty card with a relevant action and hide the per-section ghost cards. When only some sections lack data, collapse each empty section to a **one-line row** ("Habit consistency — no data yet"), not a full ghost card.
 
 **Loading state**
 - Use skeleton shapes that match the final layout (soft tint pills and tiles) when loading is genuinely needed; avoid indefinite loading without explanation or recovery.
@@ -523,12 +536,12 @@ All screens use the same system: tokens, tiles, pill charts, icon chips, floatin
 
 ### Home Dashboard
 
-- Follow section 7.2: header sheet, optional editorial headline, week strip, lavender hero panel with a pill bar chart, then the bento grid.
-- Priority order: today's progress, quick actions, tasks, habits, focus preview.
-- Show the four agreed summary metrics as stat tiles (section 9.2) using the tint map in 4.4.
-- Keep Start focus, Add task, and Add expense easy to reach.
-- The hero chart must show real saved data (for example this week's focus time). If there is not enough data, use the empty state from 11.4. Do not add a calendar, extra charts, or secondary metrics that compete with the core overview.
-- Show compact previews of today's tasks and scheduled habits in one list container.
+- Follow section 7.2: header sheet (≤ 230 dp), compact 1–2 line editorial headline, week strip, lavender hero panel (≤ 200 dp) with a pill bar chart, primary quick actions reachable without scrolling, then the 2 × 2 bento grid of summary tiles.
+- Priority order: today's progress, quick actions, 2 × 2 summary tiles, tasks, habits, daily review.
+- Show the four agreed summary metrics as a 2 × 2 grid of stat tiles (section 9.2) using the tint map in 4.4 and micro-visuals (Rule 8).
+- Keep Start focus, Add task, and Add expense easy to reach in the first viewport.
+- The hero chart must show real saved data (for example this week's focus time). If there is not enough data, use the flat uniform ghost bars from 11.4. Do not add a calendar, extra charts, or secondary metrics that compete with the core overview.
+- Show compact previews of today's tasks and scheduled habits in list containers using Level B empty states when empty.
 
 ### Daily Planning
 
@@ -539,7 +552,7 @@ All screens use the same system: tokens, tiles, pill charts, icon chips, floatin
 ### Active Work & Focus
 
 - Use compact, structured sections for task planning, habit completion, and focus history; do not create unrelated dashboard cards.
-- While a session is active, the **timer is the primary visual focus**: large tabular numerals (40–56 sp) in a hero panel (`tint.mint`), with the linked task or general activity clearly named.
+- While a session is active, the **timer is the primary visual focus**: large tabular numerals (48–56 sp) in a hero panel (`tint.mint`), with the linked task or general activity clearly named.
 - Pause/Resume and Finish controls are unambiguous: Pause/Resume as a primary ink pill button, Finish as a secondary tonal button.
 - Show paused state clearly (label plus a visual change) and exclude paused time from the displayed focused duration.
 - Focus history uses the session timeline from 11.2.
@@ -553,16 +566,16 @@ All screens use the same system: tokens, tiles, pill charts, icon chips, floatin
 ### Finance
 
 - Reuse the same lavender-led light visual system, typography, surface shapes, and spacing as Home.
-- Present balance, income, and expense as a coherent summary group (a `tint.blue` or lavender hero plus two tiles) before transaction details.
-- Use compact, clearly labelled charts for spending trends (pill bars) and category breakdown (ring with a legend); do not overload the page with competing visualisations.
+- Present balance, income, and expense as a coherent summary group (a `tint.blue` or lavender hero plus two tiles) before transaction details, with a single primary "Add entry" CTA.
+- Use compact, clearly labelled charts for spending trends (pill bars) and category breakdown (ring with a legend); apply Level C period-empty consolidation when a period has no transactions.
 - Make Income and Expense selection explicit (a segmented control or two chips).
-- Display amount and currency clearly with tabular numerals.
+- Display amount and currency clearly with tabular numerals, `₹` symbol, and Indian digit grouping (`₹12,34,567`).
 - Use separate semantic styling for income and expense, with text labels and icons as well as colour.
 
 ### Insights
 
 - Reuse the same language while allowing charts to be the main content.
-- Hierarchy: date-range chips, key takeaway sentence, hero trend visualisation, then a bento of supporting comparison tiles (mini bars, heat tiles, ring).
+- Hierarchy: date-range chips, key takeaway sentence, hero trend visualisation, then a bento of supporting comparison tiles (mini bars, heat tiles, ring), applying Level C period-empty consolidation when the period has no records.
 - Lavender is the primary chart tint with restrained supporting tints from the tint map; preserve semantic colours for finance data.
 - Use readable chart labels and honest empty states.
 - Avoid presenting a pattern as a proven cause. Use wording such as "on days with more focus time, you completed more tasks", not "focus time causes…".
@@ -594,17 +607,17 @@ Before a screen is considered ready, verify:
 - [ ] Radii are concentric; tile padding and gutters follow the spacing tokens.
 - [ ] There are no more than three ink elements, and one dominant tint plus at most two supporting tints.
 - [ ] The squint test passes: blurred, the hero, the primary action, and the selected data are the clear focal points.
-- [ ] Tiles vary in height and form a composed bento, not a uniform stack.
-- [ ] Number is big and label is small in every stat tile.
-- [ ] Charts use pill bars, direct labels, and the hatch/solid distinction.
+- [ ] Summary tiles form a composed 2 × 2 bento grid, not a uniform full-width stack.
+- [ ] Number is big and label is small in every stat tile; zero-denominator ratios show `0` in `onTintSecondary` rather than `0 / 0`.
+- [ ] Charts use pill bars, direct labels, the hatch/solid distinction, and flat equal-height ghost bars when empty.
 
 **Quality**
-- [ ] The primary action is visually obvious.
-- [ ] Text and controls have sufficient contrast (secondary text on tints uses `onTintSecondary`).
+- [ ] The primary action is visually obvious and reachable ("Start focus" in first viewport on Home).
+- [ ] Text and controls have sufficient contrast (secondary text on tints uses `onTintSecondary` ≥ 4.5:1).
 - [ ] Touch targets are at least 48 dp.
 - [ ] Labels do not rely on placeholders alone.
-- [ ] Empty, loading, error, and success states are handled where relevant.
-- [ ] Long content, large font scales, and small screens do not clip; content clears the floating dock.
+- [ ] Empty (3-level system A/B/C), loading, error, and success states are handled where relevant.
+- [ ] Long content, large font scales, and small screens do not clip; content clears the floating dock and its 32 dp fade scrim.
 - [ ] Keyboard, system bars, and navigation insets are respected.
 - [ ] Screen-reader labels and reading order are considered; charts have text summaries.
 - [ ] No fake sample data appears in real user analytics.
@@ -621,6 +634,17 @@ Before a screen is considered ready, verify:
 If a screen-specific design appears to conflict with this guideline, resolve the conflict explicitly and update the relevant documents. Do not silently introduce a new design system or expand V1 scope.
 
 ## 20. Changelog
+
+**1.3**
+- Added Rule 1 (Home composition rule: header sheet ≤ 230 dp, hero panel ≤ 200 dp, and primary quick-action row with "Start focus" in the first viewport on 360 × 800 dp).
+- Added Rule 2 (Bento 2 × 2 grid rule for summary metric tiles ≈ 140–160 dp tall).
+- Added Rule 3 (Dock separation: soft ink shadow plus 32 dp vertical canvas fade scrim above the dock and full bottom padding clearance).
+- Added Rule 4 (3-level empty-state system: Level A first-run Home checklist, Level B single compact per-container block with module-specific icon, Level C consolidated period-empty card or one-line collapsed row).
+- Added Rule 5 (Ghost chart rule: uniform, flat, equal-height pills at ≈ 40% opacity with non-overlapping captions).
+- Added Rule 6 (Empty-value style in `onTintSecondary`, zero-denominator `0` display instead of `0 / 0`, and ratio with micro progress bar when denominator > 0).
+- Added Rule 7 (Unified currency/number formatting: `₹` only, Indian digit grouping `₹12,34,567`, no `$`, tabular numerals).
+- Added Rule 8 (Per-tile micro-visuals when data exists: thin progress bar for Tasks, mini pills for Focus/Expenses, row of dots for Habits).
+- Added Rule 9 (Header-headline rule: 1–2 lines max on Home so the first interactive card starts above 300 dp from top).
 
 **1.2**
 - Added section 0 (how to use with AI tools), 3.4 Signature details, and 3.5 Anti-patterns.
