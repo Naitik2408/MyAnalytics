@@ -393,20 +393,18 @@ fun InsightsScreen(
     }
 
     val isPeriodCompletelyEmpty = !currentTaskSummary.hasTasks &&
-        currentFocusSeconds == 0L &&
         currentHabitSummary.totalDueOccurrences == 0 &&
         !currentFinanceSummary.hasTransactions
 
     // Non-causal key takeaway sentence (Section 17)
     val keyTakeaway = remember(
         currentTaskSummary,
-        currentFocusSeconds,
         currentHabitSummary,
         currentFinanceSummary
     ) {
         when {
-            currentFocusSeconds > 0L && currentTaskSummary.completedCount > 0 ->
-                "In this period, you recorded ${DateAttributionPolicy.formatDurationSeconds(currentFocusSeconds)} of focused work alongside ${currentTaskSummary.completedCount} completed task(s)."
+            currentTaskSummary.hasTasks && currentHabitSummary.totalDueOccurrences > 0 ->
+                "${currentTaskSummary.completedCount}/${currentTaskSummary.totalCount} planned tasks and ${currentHabitSummary.completedDueOccurrences}/${currentHabitSummary.totalDueOccurrences} scheduled habits completed in this period."
             currentTaskSummary.hasTasks ->
                 "${currentTaskSummary.completedCount} of ${currentTaskSummary.totalCount} planned tasks were completed in this period."
             currentHabitSummary.totalDueOccurrences > 0 ->
@@ -589,36 +587,6 @@ fun InsightsScreen(
                         )
                     }
                 }
-            }
-        }
-
-        // 3. Lavender Hero Trend Panel (Focused Time Pill Bars; flat ghost pills when empty per Rule 5)
-        item {
-            val safeIdx = selectedFocusBarIdx.coerceIn(0, (focusBarEntries.size - 1).coerceAtLeast(0))
-            val sessionCount = completedSessionsInPeriod.size
-            val avgSeconds = if (sessionCount > 0) currentFocusSeconds / sessionCount else 0L
-            val heroSubtitle = if (sessionCount > 0) {
-                "${DateAttributionPolicy.formatDurationSeconds(currentFocusSeconds)} total • $sessionCount session(s) • Avg ${DateAttributionPolicy.formatDurationSeconds(avgSeconds)} (${formatDurationComparisonText(focusComparison)})"
-            } else {
-                "0m focused time (${formatDurationComparisonText(focusComparison)})"
-            }
-
-            LaHeroPanel(
-                title = "Focused work trend",
-                subtitle = heroSubtitle,
-                icon = Icons.Outlined.Timer,
-                containerColor = colors.tints.lavender.strong
-            ) {
-                LaPillBarChart(
-                    entries = focusBarEntries,
-                    selectedIndex = safeIdx,
-                    onSelectIndex = { selectedFocusBarIdx = it },
-                    barTint = colors.tints.lavender,
-                    onHeroSurface = true,
-                    chartHeight = if (sessionCount > 0) 132.dp else 96.dp,
-                    emptyMessage = "", // Hero subtitle already communicates empty status (Rule 5)
-                    accessibilitySummary = "Focused work trend chart: $heroSubtitle"
-                )
             }
         }
 

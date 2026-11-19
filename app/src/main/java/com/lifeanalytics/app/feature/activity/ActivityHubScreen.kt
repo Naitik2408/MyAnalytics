@@ -19,19 +19,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.RateReview
 import androidx.compose.material.icons.outlined.Repeat
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,30 +36,20 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.designsystem.LaArrowButton
-import com.lifeanalytics.app.core.designsystem.LaContainerPanel
-import com.lifeanalytics.app.core.designsystem.LaHeroPanel
 import com.lifeanalytics.app.core.designsystem.LaIconChip
-import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
-import com.lifeanalytics.app.core.designsystem.LaSessionTimeline
 import com.lifeanalytics.app.core.designsystem.LaTheme
-import com.lifeanalytics.app.core.designsystem.LaTimelineSegment
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
-import com.lifeanalytics.app.domain.model.FocusSessionStatus
 import com.lifeanalytics.app.domain.model.ReviewStatus
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
-import kotlinx.coroutines.delay
 
 @Composable
 fun ActivityHubScreen(
     repository: LifeAnalyticsRepository,
     onOpenPlanning: (LocalDate) -> Unit,
-    onOpenFocus: () -> Unit,
     onOpenHabits: (LocalDate) -> Unit,
     onOpenReview: (LocalDate) -> Unit
 ) {
@@ -73,12 +58,6 @@ fun ActivityHubScreen(
     val todayTasks by remember(today) {
         repository.observeTasksForDate(today)
     }.collectAsState(initial = emptyList())
-
-    val todaySessions by remember(today) {
-        repository.observeSessionsForDate(today)
-    }.collectAsState(initial = emptyList())
-
-    val unresolvedSession by repository.observeUnresolvedSession().collectAsState(initial = null)
 
     val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
     val todayCompletions by remember(today) {
@@ -92,49 +71,8 @@ fun ActivityHubScreen(
     val taskSummary = remember(todayTasks) {
         DomainCalculations.calculateTaskSummary(todayTasks)
     }
-    val completedFocusSeconds = remember(todaySessions) {
-        DomainCalculations.sumCompletedFocusDurationSeconds(todaySessions)
-    }
-    val completedFocusCount = remember(todaySessions) {
-        todaySessions.count { it.status == FocusSessionStatus.COMPLETED }
-    }
     val habitSummary = remember(allHabits, todayCompletions, today) {
         DomainCalculations.evaluateHabitsForDate(allHabits, todayCompletions, today)
-    }
-
-    // Live tick for running session hero
-    var liveNowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(unresolvedSession?.id, unresolvedSession?.status) {
-        if (unresolvedSession?.status == FocusSessionStatus.ACTIVE) {
-            while (true) {
-                liveNowMillis = System.currentTimeMillis()
-                delay(1_000L)
-            }
-        } else {
-            liveNowMillis = System.currentTimeMillis()
-        }
-    }
-
-    // Build real timeline segments for today's completed focus sessions
-    val timelineSegments = remember(todaySessions) {
-        todaySessions
-            .filter { it.status == FocusSessionStatus.COMPLETED }
-            .mapIndexed { idx, session ->
-                val zone = runCatching { ZoneId.of(session.timezoneId) }.getOrDefault(ZoneId.systemDefault())
-                val startTime = Instant.ofEpochMilli(session.startedAtEpochMillis).atZone(zone).toLocalTime()
-                val endEpoch = session.endedAtEpochMillis
-                    ?: (session.startedAtEpochMillis + session.focusedDurationSeconds * 1000L)
-                val endTime = Instant.ofEpochMilli(endEpoch).atZone(zone).toLocalTime()
-                val startHr = startTime.hour + (startTime.minute / 60f)
-                val rawEndHr = endTime.hour + (endTime.minute / 60f)
-                val endHr = if (rawEndHr <= startHr) (startHr + 0.35f).coerceAtMost(24f) else rawEndHr
-                LaTimelineSegment(
-                    startHourFraction = startHr,
-                    endHourFraction = endHr,
-                    label = session.displayTitle,
-                    isHighlighted = idx == 0
-                )
-            }
     }
 
     val colors = LaTheme.colors
@@ -153,120 +91,18 @@ fun ActivityHubScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(spacing.space4)
     ) {
-        // 1. Concise Header
         item {
             LaScreenHeader(
                 title = "Activity",
-                subtitle = "Plan tasks, run focused sessions, track habits, and review your day."
+                subtitle = "Plan daily tasks, track habits, and review your day."
             )
         }
 
-        // 2. Active Focus Running Hero (if a session is currently running/paused/interrupted)
-        if (unresolvedSession != null) {
-            val active = unresolvedSession!!
-            item {
-                val effectiveEnd = if (active.status == FocusSessionStatus.PAUSED) {
-                    active.pauses.lastOrNull { it.resumedAtEpochMillis == null }?.pausedAtEpochMillis
-                        ?: liveNowMillis
-                } else {
-                    maxOf(liveNowMillis, active.startedAtEpochMillis)
-                }
-                val liveSeconds = DomainCalculations.calculateFocusedDurationSeconds(
-                    startedAtEpochMillis = active.startedAtEpochMillis,
-                    endOrNowEpochMillis = effectiveEnd,
-                    pauses = active.pauses
-                )
-                LaHeroPanel(
-                    title = when (active.status) {
-                        FocusSessionStatus.ACTIVE -> "Focus session running"
-                        FocusSessionStatus.PAUSED -> "Focus session paused"
-                        FocusSessionStatus.INTERRUPTED -> "Session interrupted — review needed"
-                        else -> "Focus session"
-                    },
-                    subtitle = active.displayTitle,
-                    icon = Icons.Outlined.Timer,
-                    containerColor = colors.tints.mint.strong,
-                    onActionClick = onOpenFocus,
-                    actionContentDescription = "Open Focus Timer"
-                ) {
-                    Text(
-                        text = DateAttributionPolicy.formatLiveTimer(liveSeconds),
-                        style = LaTheme.typography.timerValue,
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LaPrimaryButton(
-                        text = "Return to timer",
-                        icon = Icons.Outlined.PlayArrow,
-                        onClick = onOpenFocus,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-
-        // 3. Bento of 4 Module Tiles (Section 4.4 Tint Map; Focus Tile is Largest)
         item {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val stackColumns = maxWidth < 340.dp || fontScale >= 1.35f
 
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
-                    // Largest Bento Tile: Active Work & Focus (tint.mint)
-                    LaTintedTile(
-                        containerColor = colors.tints.mint.base,
-                        shape = LaTheme.radii.shapeLg,
-                        padding = spacing.heroPadding,
-                        onClick = onOpenFocus,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            LaIconChip(
-                                icon = Icons.Outlined.Timer,
-                                onTintedSurface = true
-                            )
-                            LaArrowButton(
-                                contentDescription = "Open Focus Timer",
-                                onClick = onOpenFocus,
-                                onTintedSurface = true
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "Active Work & Focus",
-                            style = LaTheme.typography.sectionTitle,
-                            color = colors.textPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = DateAttributionPolicy.formatDurationSeconds(completedFocusSeconds),
-                            style = LaTheme.typography.metricValue,
-                            color = colors.textPrimary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        StatusPillRow(
-                            text = if (completedFocusCount > 0) {
-                                "$completedFocusCount session(s) completed today"
-                            } else {
-                                "No focus sessions recorded today"
-                            },
-                            isCompleted = completedFocusCount > 0
-                        )
-                        if (unresolvedSession == null) {
-                            Spacer(modifier = Modifier.height(14.dp))
-                            LaPrimaryButton(
-                                text = "Start focus",
-                                icon = Icons.Outlined.PlayArrow,
-                                onClick = onOpenFocus,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    // 2-Column Bento Row: Daily Planning (lavender) + Daily Habits (butter) (Rule 6: 0 instead of 0 / 0 or 0 due)
                     val allTasksDone = taskSummary.hasTasks && taskSummary.completedCount == taskSummary.totalCount
                     val taskMetricText = if (taskSummary.hasTasks) taskSummary.completionRatioText else "0"
                     val taskStatusText = if (taskSummary.hasTasks) {
@@ -389,21 +225,6 @@ fun ActivityHubScreen(
                 }
             }
         }
-
-        // 4. Today's Session Timeline (Section 11.2 & Step 2 Activity: concise subtitle, no duplicate Open timer link)
-        item {
-            LaContainerPanel(
-                title = "Today's focus timeline",
-                subtitle = "Today's sessions, excluding pauses"
-            ) {
-                LaSessionTimeline(
-                    segments = timelineSegments,
-                    tint = colors.tints.mint,
-                    emptyMessage = "No completed focus intervals today yet",
-                    accessibilitySummary = "Today's focus timeline showing ${timelineSegments.size} completed session intervals."
-                )
-            }
-        }
     }
 }
 
@@ -467,9 +288,6 @@ private fun BentoModuleCard(
     }
 }
 
-/**
- * Reserves the check mark strictly for completed states; uses a neutral dot for planned/empty states.
- */
 @Composable
 private fun StatusPillRow(
     text: String,

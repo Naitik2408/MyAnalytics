@@ -849,6 +849,43 @@ class LifeAnalyticsRepository(
     }
 
     // =========================================================================
+    // ISOLATED 1-MONTH DEMO / SAMPLE DATASET (October 2026)
+    // =========================================================================
+
+    suspend fun hasDemoSampleData(): Boolean {
+        return taskDao.getAllTasks().any {
+            it.id.startsWith(com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_ID_PREFIX)
+        } || habitDao.getAllHabitEntities().any {
+            it.id.startsWith(com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_ID_PREFIX)
+        }
+    }
+
+    suspend fun seedDemoSampleMonth(
+        currencyCode: String = "INR"
+    ): Result<com.lifeanalytics.app.data.demo.SampleDataSeeder.SeedSummary> = database.withTransaction {
+        val targetMonth = com.lifeanalytics.app.data.demo.SampleDataSeeder.targetSampleMonth(
+            timeProvider.todayLocalDate()
+        )
+        val summary = com.lifeanalytics.app.data.demo.SampleDataSeeder.seedSampleMonth(
+            taskDao = taskDao,
+            habitDao = habitDao,
+            financeDao = financeDao,
+            yearMonth = targetMonth,
+            currencyCode = currencyCode
+        )
+        Result.success(summary)
+    }
+
+    suspend fun removeDemoSampleMonth(): Result<Unit> = database.withTransaction {
+        com.lifeanalytics.app.data.demo.SampleDataSeeder.removeSampleMonth(
+            taskDao = taskDao,
+            habitDao = habitDao,
+            financeDao = financeDao
+        )
+        Result.success(Unit)
+    }
+
+    // =========================================================================
     // MAPPERS
     // =========================================================================
 

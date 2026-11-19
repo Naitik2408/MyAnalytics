@@ -578,6 +578,82 @@ fun SettingsScreen(
             }
         }
 
+        // Isolated Demo / Sample Dataset (October 2026) Panel
+        item {
+            var demoStatusText by remember { mutableStateOf<String?>(null) }
+            var isSeedBusy by remember { mutableStateOf(false) }
+
+            LaContainerPanel(
+                title = "Demo Sample Dataset (October 2026)",
+                subtitle = "Load 1 month of realistic, isolated sample data (Oct 1–31, 2026) tagged with [Demo] to preview the 365-day heatmap, category scores, and trend charts without overwriting personal records."
+            ) {
+                if (demoStatusText != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(radii.shapeSm)
+                            .background(tints.mint.soft)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = demoStatusText!!,
+                            style = typography.label,
+                            color = colors.textPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(spacing.space2))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+                ) {
+                    LaPrimaryButton(
+                        text = "Load Oct 2026 Demo",
+                        enabled = !isSeedBusy,
+                        onClick = {
+                            isSeedBusy = true
+                            scope.launch {
+                                repository.seedDemoSampleMonth(preferences.currencyCode)
+                                    .onSuccess { summary ->
+                                        if (preferences.monthlyBudgetMinor == null || preferences.monthlyBudgetMinor == 0L) {
+                                            preferencesRepository.setMonthlyBudgetMinor(
+                                                com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR
+                                            )
+                                        }
+                                        demoStatusText = "Loaded ${summary.monthLabel}: ${summary.habitsSeeded} habits, ${summary.habitCompletionsSeeded} completions, ${summary.tasksSeeded} tasks, ${summary.transactionsSeeded} finance entries."
+                                    }
+                                    .onFailure { err ->
+                                        demoStatusText = "Could not load sample data: ${err.message}"
+                                    }
+                                isSeedBusy = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    LaSecondaryButton(
+                        text = "Remove Demo Data",
+                        enabled = !isSeedBusy,
+                        onClick = {
+                            isSeedBusy = true
+                            scope.launch {
+                                repository.removeDemoSampleMonth()
+                                    .onSuccess {
+                                        demoStatusText = "Removed all [Demo] records. Personal records were preserved."
+                                    }
+                                    .onFailure { err ->
+                                        demoStatusText = "Could not remove demo data: ${err.message}"
+                                    }
+                                isSeedBusy = false
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
         // Privacy & Permissions Panel
         item {
             LaContainerPanel {
@@ -596,7 +672,7 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(spacing.space3))
                 Text(
-                    text = "• Local-first data: All tasks, focus sessions, habits, finance records, and daily reviews are stored in app-private SQLite (Room) storage on your device.\n" +
+                    text = "• Local-first data: All tasks, habits, finance records, and daily reviews are stored in app-private SQLite (Room) storage on your device.\n" +
                         "• Authenticated cloud backup: Backups are encrypted on your phone using AES-256-GCM before upload to Supabase private storage. No unencrypted records leave your device.\n" +
                         "• Zero sensitive permissions: Life Analytics does not request camera, microphone, location, contacts, external storage, or exact alarms.",
                     style = typography.body,
@@ -626,7 +702,7 @@ fun SettingsScreen(
                 subtitle = "Version 1.1.0 (V1) • Native Android (Kotlin & Jetpack Compose)"
             ) {
                 Text(
-                    text = "Minimum input, maximum meaningful output — one source of truth across Home, Daily Planning, Focus Timer, Daily Habits, Finance, Insights, and Daily Review.",
+                    text = "Minimum input, maximum meaningful output — one source of truth across Home, Daily Planning, Daily Habits, Finance, Insights, and Daily Review.",
                     style = typography.label,
                     color = colors.textSecondary
                 )

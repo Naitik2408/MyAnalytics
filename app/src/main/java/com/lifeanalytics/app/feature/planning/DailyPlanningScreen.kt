@@ -84,7 +84,6 @@ fun DailyPlanningScreen(
     selectedDate: LocalDate,
     today: LocalDate,
     onDateChange: (LocalDate) -> Unit,
-    onStartFocusForTask: (Task) -> Unit,
     openAddDialogInitially: Boolean = false,
     onConsumedInitialAddDialog: () -> Unit = {},
     onNavigateBack: (() -> Unit)? = null
@@ -283,8 +282,7 @@ fun DailyPlanningScreen(
                                         editingTask = task
                                         showTaskDialog = true
                                     },
-                                    onDelete = { taskPendingDelete = task },
-                                    onStartFocus = { onStartFocusForTask(task) }
+                                    onDelete = { taskPendingDelete = task }
                                 )
                                 if (index < incompleteTasks.lastIndex) {
                                     LaRowDivider()
@@ -318,8 +316,7 @@ fun DailyPlanningScreen(
                                         editingTask = task
                                         showTaskDialog = true
                                     },
-                                    onDelete = { taskPendingDelete = task },
-                                    onStartFocus = null
+                                    onDelete = { taskPendingDelete = task }
                                 )
                                 if (index < completedTasks.lastIndex) {
                                     LaRowDivider()
@@ -380,7 +377,7 @@ fun DailyPlanningScreen(
     taskPendingDelete?.let { target ->
         ConfirmDeleteDialog(
             title = "Delete this task?",
-            message = "\"${target.title}\" will be removed from your plan. Any focus sessions already recorded with this task will be preserved in your focus history.",
+            message = "\"${target.title}\" will be removed from your daily plan.",
             onConfirm = {
                 scope.launch {
                     repository.deleteTask(target.id)
@@ -401,8 +398,7 @@ private fun TaskRowItem(
     task: Task,
     onToggleComplete: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onStartFocus: (() -> Unit)?
+    onDelete: () -> Unit
 ) {
     val colors = LaTheme.colors
     val tints = colors.tints
@@ -470,15 +466,6 @@ private fun TaskRowItem(
             horizontalArrangement = Arrangement.spacedBy(spacing.space1),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (onStartFocus != null && !task.isCompleted) {
-                LaCircularIconButton(
-                    icon = Icons.Outlined.PlayArrow,
-                    contentDescription = "Start focus session for ${task.title}",
-                    onClick = onStartFocus,
-                    containerColor = tints.mint.base,
-                    contentColor = colors.textPrimary
-                )
-            }
             LaCircularIconButton(
                 icon = Icons.Outlined.Edit,
                 contentDescription = "Edit ${task.title}",

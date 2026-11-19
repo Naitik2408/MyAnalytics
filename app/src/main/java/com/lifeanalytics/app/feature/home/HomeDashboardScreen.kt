@@ -3,7 +3,6 @@ package com.lifeanalytics.app.feature.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,16 +17,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.EventNote
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.RateReview
-import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -44,52 +37,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.lifeanalytics.app.core.common.MoneyUtils
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
 import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
-import com.lifeanalytics.app.core.designsystem.LaArrowButton
+import com.lifeanalytics.app.core.designsystem.LaCategoryPerformancePanel
 import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
-import com.lifeanalytics.app.core.designsystem.LaFirstRunChecklistCard
-import com.lifeanalytics.app.core.designsystem.LaHeroPanel
-import com.lifeanalytics.app.core.designsystem.LaIconChip
-import com.lifeanalytics.app.core.designsystem.LaMicroDots
-import com.lifeanalytics.app.core.designsystem.LaMicroPills
-import com.lifeanalytics.app.core.designsystem.LaMicroProgressBar
-import com.lifeanalytics.app.core.designsystem.LaModuleEmptyState
-import com.lifeanalytics.app.core.designsystem.LaPillBarChart
-import com.lifeanalytics.app.core.designsystem.LaPillBarEntry
-import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
-import com.lifeanalytics.app.core.designsystem.LaRowDivider
-import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
-import com.lifeanalytics.app.core.designsystem.LaStatTile
-import com.lifeanalytics.app.core.designsystem.LaTheme
-import com.lifeanalytics.app.core.designsystem.LaTintedTile
-import com.lifeanalytics.app.core.designsystem.LaDirectionCard
 import com.lifeanalytics.app.core.designsystem.LaDayDrilldownBottomSheet
-import com.lifeanalytics.app.core.designsystem.LaLifeScoreOverviewPanel
+import com.lifeanalytics.app.core.designsystem.LaIconChip
+import com.lifeanalytics.app.core.designsystem.LaOverallPerformanceCard
 import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
 import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
-import com.lifeanalytics.app.domain.growth.GrowthEngine
-import com.lifeanalytics.app.domain.growth.GrowthInputData
-import com.lifeanalytics.app.domain.growth.GrowthWindow
-import com.lifeanalytics.app.domain.model.FocusSessionStatus
-import com.lifeanalytics.app.domain.model.ReviewStatus
 import com.lifeanalytics.app.domain.model.Task
-import com.lifeanalytics.app.domain.model.TransactionType
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
-import com.lifeanalytics.app.feature.finance.TransactionFormDialog
-import com.lifeanalytics.app.feature.planning.TaskFormDialog
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.TextStyle
@@ -102,7 +72,6 @@ fun HomeDashboardScreen(
     currencyCode: String,
     monthlyBudgetMinor: Long? = null,
     onNavigateToPlanning: (LocalDate) -> Unit,
-    onNavigateToFocus: (String?) -> Unit,
     onNavigateToHabits: (LocalDate) -> Unit,
     onNavigateToFinanceDay: (LocalDate) -> Unit,
     onNavigateToDailyReview: (LocalDate) -> Unit,
@@ -121,16 +90,6 @@ fun HomeDashboardScreen(
         repository.observeTasksInRange(weekStart, weekEnd)
     }.collectAsState(initial = emptyList())
 
-    val todaySessions by remember(today) {
-        repository.observeSessionsForDate(today)
-    }.collectAsState(initial = emptyList())
-
-    val weekSessions by remember(weekStart, weekEnd) {
-        repository.observeSessionsInRange(weekStart, weekEnd)
-    }.collectAsState(initial = emptyList())
-
-    val unresolvedSession by repository.observeUnresolvedSession().collectAsState(initial = null)
-
     val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
     val todayHabitCompletions by remember(today) {
         repository.observeHabitCompletionsForDate(today)
@@ -139,20 +98,11 @@ fun HomeDashboardScreen(
         repository.observeHabitCompletionsInRange(weekStart, weekEnd)
     }.collectAsState(initial = emptyList())
 
-    val todayTransactions by remember(today) {
-        repository.observeTransactionsForDate(today)
-    }.collectAsState(initial = emptyList())
-
     val allTasks by repository.observeAllTasks().collectAsState(initial = emptyList())
-    val allSessions by repository.observeAllSessions().collectAsState(initial = emptyList())
     val allCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
     val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
 
-    val todayReview by remember(today) {
-        repository.observeReviewForDate(today)
-    }.collectAsState(initial = null)
-
-    var analyticsWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.WEEKLY) }
+    var analyticsWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.MONTHLY) }
     var selectedTrendPointIdx by rememberSaveable { mutableIntStateOf(0) }
     var drilldownDateEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
@@ -204,20 +154,10 @@ fun HomeDashboardScreen(
     val taskSummary = remember(todayTasks) {
         DomainCalculations.calculateTaskSummary(todayTasks)
     }
-    val completedFocusSeconds = remember(todaySessions) {
-        DomainCalculations.sumCompletedFocusDurationSeconds(todaySessions)
-    }
-    val completedSessionCount = remember(todaySessions) {
-        todaySessions.count { it.status == FocusSessionStatus.COMPLETED }
-    }
     val habitSummary = remember(allHabits, todayHabitCompletions, today) {
         DomainCalculations.evaluateHabitsForDate(allHabits, todayHabitCompletions, today)
     }
-    val financeSummary = remember(todayTransactions) {
-        DomainCalculations.calculateFinancePeriodSummary(todayTransactions)
-    }
 
-    // Build 7-day week strip & weekly focus pill bar entries from real source records
     val weekDays = remember(weekStart) {
         (0L..6L).map { weekStart.plusDays(it) }
     }
@@ -226,38 +166,12 @@ fun HomeDashboardScreen(
     }
     var selectedWeekIndex by rememberSaveable { mutableIntStateOf(todayIndexInWeek) }
 
-    val weeklyFocusEntries = remember(weekDays, weekSessions) {
-        weekDays.map { date ->
-            val daySeconds = DomainCalculations.sumCompletedFocusDurationSeconds(
-                weekSessions.filter { it.startedLocalDate == date }
-            )
-            val minutes = daySeconds / 60f
-            LaPillBarEntry(
-                label = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
-                value = minutes,
-                valueLabel = DateAttributionPolicy.formatDurationSeconds(daySeconds)
-            )
-        }
-    }
-    val weeklyTotalFocusSeconds = remember(weekSessions) {
-        DomainCalculations.sumCompletedFocusDurationSeconds(weekSessions)
-    }
-
-    val isFirstRunEmpty = weekTasks.isEmpty() &&
-        allHabits.isEmpty() &&
-        weekSessions.isEmpty() &&
-        todayTransactions.isEmpty() &&
-        todayReview == null
-
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showAddTaskDialog by remember { mutableStateOf(false) }
-    var showAddExpenseDialog by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val colors = LaTheme.colors
     val spacing = LaTheme.spacing
-    val fontScale = LocalDensity.current.fontScale
 
     Box(
         modifier = Modifier
@@ -269,7 +183,7 @@ fun HomeDashboardScreen(
             contentPadding = PaddingValues(bottom = spacing.dockBottomClearance),
             verticalArrangement = Arrangement.spacedBy(spacing.space3)
         ) {
-            // 1. White Header Sheet (<= 220 dp total height per v1.3 Rules 1 & 9)
+            // 1. Date / Calendar Section (Compact Header Sheet + 7-Day Week Strip)
             item {
                 Column(
                     modifier = Modifier
@@ -292,11 +206,10 @@ fun HomeDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Neutral person icon instead of fake "LA" initials (Step 2 Home)
                             LaIconChip(
                                 icon = Icons.Outlined.Person,
                                 backgroundColor = colors.tints.lavender.base,
-                                size = 42.dp
+                                size = 40.dp
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
@@ -327,31 +240,17 @@ fun HomeDashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(spacing.space2))
-
-                    // Home-only Editorial Headline (compact 1-2 lines per Rule 9)
-                    Text(
-                        text = "Your daily rhythm, clearly.",
-                        style = LaTheme.typography.editorialHeadline,
-                        color = colors.textPrimary,
-                        maxLines = 2
-                    )
-
                     Spacer(modifier = Modifier.height(spacing.space3))
 
-                    // Week Strip (Section 7.2)
                     HomeWeekStrip(
                         weekDays = weekDays,
                         today = today,
                         selectedDay = weekDays.getOrElse(selectedWeekIndex) { today },
                         weekTasks = weekTasks,
-                        weekSessions = weekSessions,
                         weekHabitCompletions = weekHabitCompletions,
                         onSelectDay = { idx, date ->
                             selectedWeekIndex = idx
-                            if (date != today) {
-                                onNavigateToPlanning(date)
-                            }
+                            drilldownDateEpoch = date.toEpochDay()
                         }
                     )
                 }
@@ -368,204 +267,19 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // Running / Paused / Interrupted Focus Session Banner
-            if (unresolvedSession != null) {
-                val active = unresolvedSession!!
-                item {
-                    Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                        LaTintedTile(
-                            containerColor = colors.tints.mint.strong,
-                            shape = LaTheme.radii.shapeLg,
-                            onClick = { onNavigateToFocus(null) },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    LaIconChip(
-                                        icon = Icons.Outlined.Timer,
-                                        onTintedSurface = true
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        val statusText = when (active.status) {
-                                            FocusSessionStatus.ACTIVE -> "Focus session running"
-                                            FocusSessionStatus.PAUSED -> "Focus session paused"
-                                            FocusSessionStatus.INTERRUPTED -> "Interrupted session needs review"
-                                            else -> "Focus session"
-                                        }
-                                        Text(
-                                            text = statusText,
-                                            style = LaTheme.typography.sectionTitle,
-                                            color = colors.textPrimary
-                                        )
-                                        Text(
-                                            text = active.displayTitle,
-                                            style = LaTheme.typography.label,
-                                            color = colors.onTintSecondary
-                                        )
-                                    }
-                                }
-                                LaArrowButton(
-                                    contentDescription = "Open Focus Timer",
-                                    onClick = { onNavigateToFocus(null) },
-                                    onTintedSurface = true
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Lavender Hero Panel (<= 200 dp per Rule 1; flat equal-height ghost bars & no second caption pill per Rule 5)
-            item {
-                val selectedDateInHero = weekDays.getOrElse(selectedWeekIndex) { today }
-                val selectedEntry = weeklyFocusEntries.getOrNull(selectedWeekIndex)
-                val heroSubtitle = if (weeklyTotalFocusSeconds > 0L) {
-                    "This week: ${DateAttributionPolicy.formatDurationSeconds(weeklyTotalFocusSeconds)} • ${DateAttributionPolicy.formatShortDate(selectedDateInHero)}: ${selectedEntry?.valueLabel ?: "0m"}"
-                } else {
-                    "No focus sessions this week yet"
-                }
-
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaHeroPanel(
-                        title = "Focus rhythm",
-                        subtitle = heroSubtitle,
-                        icon = Icons.Outlined.Timer,
-                        containerColor = colors.tints.lavender.strong,
-                        onActionClick = { onNavigateToFocus(null) },
-                        actionContentDescription = "Open Focus Timer"
-                    ) {
-                        LaPillBarChart(
-                            entries = weeklyFocusEntries,
-                            selectedIndex = selectedWeekIndex,
-                            onSelectIndex = { selectedWeekIndex = it },
-                            barTint = colors.tints.lavender,
-                            onHeroSurface = true,
-                            chartHeight = if (weeklyTotalFocusSeconds > 0L) 104.dp else 84.dp,
-                            emptyMessage = "", // Container subtitle already states empty status (Rule 5)
-                            accessibilitySummary = "Weekly focus time chart: $heroSubtitle"
-                        )
-                    }
-                }
-            }
-
-            // 3. Primary Quick Actions in First Viewport (v1.3 Rule 1: "Start focus" reachable without scrolling)
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = spacing.screenInset),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    LaPrimaryButton(
-                        text = if (unresolvedSession != null) "Resume focus session" else "Start focus",
-                        icon = Icons.Outlined.PlayArrow,
-                        onClick = { onNavigateToFocus(null) },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                    ) {
-                        LaSecondaryButton(
-                            text = "Add task",
-                            icon = Icons.Outlined.Add,
-                            onClick = { showAddTaskDialog = true },
-                            containerColor = colors.surface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        LaSecondaryButton(
-                            text = "Add expense",
-                            icon = Icons.Outlined.Add,
-                            onClick = { showAddExpenseDialog = true },
-                            containerColor = colors.surface,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // 4. First-Run "Get started" Card (Level A — Rule 4, shown only when all 4 modules are empty)
-            if (isFirstRunEmpty) {
-                item {
-                    Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                        LaFirstRunChecklistCard(
-                            onAddFirstTask = { showAddTaskDialog = true },
-                            onPickDailyHabit = { onNavigateToHabits(today) },
-                            onStartFocusSession = { onNavigateToFocus(null) }
-                        )
-                    }
-                }
-            }
-
-            // 4A. Life Performance Overview Card (Overall Score + Health/Career/Finance breakdowns per 19 Nov 2026 spec)
-            item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaLifeScoreOverviewPanel(
-                        performance = lifePerformance,
-                        currencyCode = currencyCode,
-                        selectedWindow = analyticsWindow,
-                        onSelectWindow = {
-                            analyticsWindow = it
-                            selectedTrendPointIdx = 0
-                        },
-                        showWindowSelector = true,
-                        onNavigateToInsights = onNavigateToInsights
-                    )
-                }
-            }
-
-            // 4B. Performance Over Time Line Chart (Daily, Weekly, Monthly, Yearly view)
-            item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    val safeTrendIdx = selectedTrendPointIdx.coerceIn(
-                        0,
-                        (trendSeries.size - 1).coerceAtLeast(0)
-                    )
-                    val selectedPt = trendSeries.getOrNull(safeTrendIdx)
-                    val chartSubtitle = if (selectedPt?.overallScore != null) {
-                        "${selectedPt.label}: ${selectedPt.overallScore} / 100 (${selectedPt.availableCategoriesCount} of 3 areas)"
-                    } else {
-                        "Tap any point to inspect period score (${analyticsWindow.label} trend)"
-                    }
-                    LaContainerPanel(
-                        title = "Performance over time",
-                        subtitle = chartSubtitle,
-                        actionLabel = "Insights",
-                        onActionClick = onNavigateToInsights
-                    ) {
-                        LaPerformanceLineChart(
-                            points = trendSeries,
-                            selectedIndex = safeTrendIdx,
-                            onSelectIndex = { selectedTrendPointIdx = it },
-                            tint = colors.tints.lavender,
-                            accessibilitySummary = "Performance over time line chart for ${analyticsWindow.label} window."
-                        )
-                    }
-                }
-            }
-
-            // 4C. Interactive 365-Day Year View (1 dot per calendar day; elapsed vs missing vs future)
+            // 2. 365-Day Performance Heatmap (Immediately after Date/Calendar section)
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
                     val yearSub = buildString {
                         append("${yearCalendarModel.scoredDaysCount} scored • ")
-                        append("${yearCalendarModel.elapsedDaysWithoutScoreCount} without score • ")
-                        append("${yearCalendarModel.futureDaysCount} future days")
+                        append("${yearCalendarModel.elapsedDaysWithoutScoreCount} no data")
                         yearCalendarModel.averageYearScore?.let { avg ->
                             append(" • Avg $avg/100")
                         }
                     }
                     LaContainerPanel(
-                        title = "${yearCalendarModel.year} Year in pixels (${yearCalendarModel.totalDaysInYear} days)",
-                        subtitle = "$yearSub • Tap any day to inspect details"
+                        title = "${yearCalendarModel.year} performance",
+                        subtitle = yearSub
                     ) {
                         LaYear365Calendar(
                             calendar = yearCalendarModel,
@@ -579,234 +293,97 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 5. 2 × 2 Bento Grid of Summary Metrics (v1.3 Rules 2, 6, 8)
+            // 3. Overall Life Performance / Score
             item {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = spacing.screenInset)
-                ) {
-                    val shouldStackColumns = maxWidth < 330.dp || fontScale >= 1.35f
-                    val taskRatio = if (taskSummary.totalCount > 0) {
-                        taskSummary.completedCount.toFloat() / taskSummary.totalCount.toFloat()
-                    } else 0f
-                    val maxWeeklyFocusVal = weeklyFocusEntries.maxOfOrNull { it.value }?.takeIf { it > 0f } ?: 1f
-                    val focusMicroFractions = weeklyFocusEntries.map { (it.value / maxWeeklyFocusVal).coerceIn(0f, 1f) }
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    LaOverallPerformanceCard(
+                        performance = lifePerformance,
+                        selectedWindow = analyticsWindow,
+                        onSelectWindow = {
+                            analyticsWindow = it
+                            selectedTrendPointIdx = 0
+                        },
+                        showWindowSelector = true
+                    )
+                }
+            }
 
-                    val tasksTile: @Composable (Modifier) -> Unit = { mod ->
-                        LaStatTile(
-                            label = "Tasks completed",
-                            value = if (taskSummary.hasTasks) taskSummary.completionRatioText else "0",
-                            icon = Icons.AutoMirrored.Outlined.EventNote,
-                            supportingText = if (taskSummary.hasTasks) {
-                                "${taskSummary.completedCount} of ${taskSummary.totalCount} done today"
-                            } else {
-                                "No tasks planned"
-                            },
-                            containerColor = colors.tints.lavender.base,
-                            isEmptyValue = !taskSummary.hasTasks,
-                            minHeight = 148.dp,
-                            onClick = { onNavigateToPlanning(today) },
-                            modifier = mod,
-                            microVisual = if (taskSummary.hasTasks) {
-                                {
-                                    LaMicroProgressBar(progress = taskRatio)
-                                }
-                            } else null
-                        )
+            // 4. Category-wise Performance
+            item {
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    LaCategoryPerformancePanel(
+                        performance = lifePerformance,
+                        currencyCode = currencyCode
+                    )
+                }
+            }
+
+            // 5. Performance Trend / Graph
+            item {
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    val safeTrendIdx = selectedTrendPointIdx.coerceIn(
+                        0,
+                        (trendSeries.size - 1).coerceAtLeast(0)
+                    )
+                    val selectedPt = trendSeries.getOrNull(safeTrendIdx)
+                    val chartSubtitle = if (selectedPt?.overallScore != null) {
+                        "${selectedPt.label} • ${selectedPt.overallScore}/100"
+                    } else {
+                        "${analyticsWindow.label} score trend"
                     }
-
-                    val focusTile: @Composable (Modifier) -> Unit = { mod ->
-                        LaStatTile(
-                            label = "Focused time",
-                            value = DateAttributionPolicy.formatDurationSeconds(completedFocusSeconds),
-                            icon = Icons.Outlined.Timer,
-                            supportingText = when {
-                                unresolvedSession != null -> "Session in progress"
-                                completedSessionCount > 0 -> "$completedSessionCount session(s) today"
-                                else -> "No sessions today"
-                            },
-                            containerColor = colors.tints.mint.base,
-                            isEmptyValue = completedFocusSeconds == 0L,
-                            minHeight = 148.dp,
-                            onClick = { onNavigateToFocus(null) },
-                            modifier = mod,
-                            microVisual = if (weeklyTotalFocusSeconds > 0L) {
-                                {
-                                    LaMicroPills(fractions = focusMicroFractions)
-                                }
-                            } else null
+                    LaContainerPanel(
+                        title = "Performance trend",
+                        subtitle = chartSubtitle,
+                        actionLabel = "Insights",
+                        onActionClick = onNavigateToInsights
+                    ) {
+                        LaPerformanceLineChart(
+                            points = trendSeries,
+                            selectedIndex = safeTrendIdx,
+                            onSelectIndex = { selectedTrendPointIdx = it },
+                            tint = colors.tints.lavender,
+                            emptyMessage = "No scored intervals in this window yet.",
+                            accessibilitySummary = "Performance trend chart for ${analyticsWindow.label} window."
                         )
-                    }
-
-                    val expensesTile: @Composable (Modifier) -> Unit = { mod ->
-                        LaStatTile(
-                            label = "Today's expenses",
-                            value = MoneyUtils.formatMinorUnits(financeSummary.totalExpenseMinor, currencyCode),
-                            icon = Icons.Outlined.AccountBalanceWallet,
-                            supportingText = if (financeSummary.transactionCount > 0) {
-                                "${financeSummary.transactionCount} entry today"
-                            } else {
-                                "No expenses today"
-                            },
-                            containerColor = colors.tints.blue.base,
-                            isEmptyValue = financeSummary.totalExpenseMinor == 0L,
-                            minHeight = 148.dp,
-                            onClick = { onNavigateToFinanceDay(today) },
-                            modifier = mod,
-                            microVisual = if (financeSummary.totalExpenseMinor > 0L) {
-                                {
-                                    LaMicroPills(
-                                        fractions = todayTransactions
-                                            .filter { it.type == TransactionType.EXPENSE }
-                                            .take(6)
-                                            .let { txs ->
-                                                val maxAmt = txs.maxOfOrNull { it.amountMinor }?.toFloat()?.coerceAtLeast(1f) ?: 1f
-                                                txs.map { (it.amountMinor / maxAmt).coerceIn(0.25f, 1f) }
-                                            }
-                                    )
-                                }
-                            } else null
-                        )
-                    }
-
-                    val habitsTile: @Composable (Modifier) -> Unit = { mod ->
-                        LaStatTile(
-                            label = "Habits done",
-                            value = if (habitSummary.hasDueHabits) {
-                                "${habitSummary.completedDueCount} / ${habitSummary.totalDueCount}"
-                            } else {
-                                "0"
-                            },
-                            icon = Icons.Outlined.Repeat,
-                            supportingText = when {
-                                allHabits.isEmpty() -> "No habits scheduled"
-                                habitSummary.hasDueHabits -> "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} due today"
-                                else -> "None due today"
-                            },
-                            containerColor = colors.tints.butter.base,
-                            isEmptyValue = !habitSummary.hasDueHabits,
-                            minHeight = 148.dp,
-                            onClick = { onNavigateToHabits(today) },
-                            modifier = mod,
-                            microVisual = if (habitSummary.hasDueHabits) {
-                                {
-                                    LaMicroDots(
-                                        states = habitSummary.dueHabits.map { it.isCompleted }
-                                    )
-                                }
-                            } else null
-                        )
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
-                        if (shouldStackColumns) {
-                            tasksTile(Modifier.fillMaxWidth())
-                            focusTile(Modifier.fillMaxWidth())
-                            expensesTile(Modifier.fillMaxWidth())
-                            habitsTile(Modifier.fillMaxWidth())
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                            ) {
-                                tasksTile(Modifier.weight(1f))
-                                focusTile(Modifier.weight(1f))
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
-                            ) {
-                                expensesTile(Modifier.weight(1f))
-                                habitsTile(Modifier.weight(1f))
-                            }
-                        }
                     }
                 }
             }
 
-            // 6. Today's Tasks in a Single White Container Panel (Level B Empty State per Rule 4)
+            // 6. Daily Habits and Tasks Summary (Compact Today Execution Panel — no redundant Add buttons)
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
                     LaContainerPanel(
-                        title = "Today's tasks",
-                        subtitle = if (todayTasks.isNotEmpty()) {
-                            "${taskSummary.completedCount} of ${taskSummary.totalCount} completed"
-                        } else null,
-                        actionLabel = "View all",
-                        onActionClick = { onNavigateToPlanning(today) }
+                        title = "Today's habits & tasks",
+                        subtitle = "Habits ${habitSummary.completedDueCount}/${habitSummary.totalDueCount} • Tasks ${taskSummary.completedCount}/${taskSummary.totalCount}"
                     ) {
-                        if (todayTasks.isEmpty()) {
-                            LaModuleEmptyState(
-                                icon = Icons.AutoMirrored.Outlined.EventNote,
-                                title = "No tasks planned for today",
-                                message = "Add your key tasks for today to keep your plan clear.",
-                                actionLabel = "Add task",
-                                onActionClick = { showAddTaskDialog = true },
-                                chipColor = colors.tints.lavender.soft
+                        // Habits subsection
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Habits (${habitSummary.completedDueCount}/${habitSummary.totalDueCount})",
+                                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
                             )
-                        } else {
-                            val previewTasks = todayTasks.take(4)
-                            previewTasks.forEachIndexed { index, task ->
-                                HomeTaskListRow(
-                                    task = task,
-                                    onToggleComplete = { checked ->
-                                        scope.launch {
-                                            repository.setTaskCompleted(task.id, checked)
-                                                .onFailure { errorMessage = it.message }
-                                        }
-                                    },
-                                    onStartFocus = { onNavigateToFocus(task.id) },
-                                    onOpenPlanning = { onNavigateToPlanning(today) }
-                                )
-                                if (index < previewTasks.lastIndex) {
-                                    LaRowDivider()
-                                }
-                            }
-                            if (todayTasks.size > 4) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "+${todayTasks.size - 4} more task(s) in Daily Planning",
-                                    style = LaTheme.typography.label,
-                                    color = colors.accent,
-                                    modifier = Modifier
-                                        .pressScaleClickable { onNavigateToPlanning(today) }
-                                        .padding(vertical = 4.dp)
-                                )
-                            }
+                            Text(
+                                text = "Manage",
+                                style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.accent,
+                                modifier = Modifier
+                                    .pressScaleClickable { onNavigateToHabits(today) }
+                                    .padding(vertical = 2.dp, horizontal = 4.dp)
+                            )
                         }
-                    }
-                }
-            }
 
-            // 7. Today's Habits in a Single White Container Panel (Level B Empty State with distinct Repeat icon)
-            item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaContainerPanel(
-                        title = "Today's habits",
-                        subtitle = if (habitSummary.hasDueHabits) {
-                            "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} completed"
-                        } else null,
-                        actionLabel = "View all",
-                        onActionClick = { onNavigateToHabits(today) }
-                    ) {
-                        if (allHabits.isEmpty()) {
-                            LaModuleEmptyState(
-                                icon = Icons.Outlined.Repeat,
-                                title = "No habits created yet",
-                                message = "Set up recurring daily or weekday habits to observe consistency.",
-                                actionLabel = "Create habit",
-                                onActionClick = { onNavigateToHabits(today) },
-                                chipColor = colors.tints.butter.soft
-                            )
-                        } else if (habitSummary.dueHabits.isEmpty()) {
-                            LaModuleEmptyState(
-                                icon = Icons.Outlined.Repeat,
-                                title = "No habits scheduled for today",
-                                message = "Your ${habitSummary.totalActiveHabitsCount} active habit(s) are scheduled on other weekdays.",
-                                actionLabel = "View schedule",
-                                onActionClick = { onNavigateToHabits(today) },
-                                chipColor = colors.tints.butter.soft
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        if (habitSummary.dueHabits.isEmpty()) {
+                            Text(
+                                text = "No habits due today",
+                                style = LaTheme.typography.label,
+                                color = colors.textSecondary
                             )
                         } else {
                             habitSummary.dueHabits.forEachIndexed { index, item ->
@@ -822,7 +399,7 @@ fun HomeDashboardScreen(
                                                 ).onFailure { errorMessage = it.message }
                                             }
                                         }
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     LaAnimatedCheckbox(
@@ -837,31 +414,20 @@ fun HomeDashboardScreen(
                                             }
                                         }
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = item.habit.name,
+                                        style = LaTheme.typography.body.copy(fontWeight = FontWeight.Medium),
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    item.habit.lifeArea?.let { area ->
                                         Text(
-                                            text = item.habit.name,
-                                            style = LaTheme.typography.body.copy(fontWeight = FontWeight.Medium),
-                                            color = colors.textPrimary
-                                        )
-                                        Text(
-                                            text = item.habit.lifeArea?.displayName ?: "Unclassified life area",
+                                            text = area.shortName,
                                             style = LaTheme.typography.chartMicroLabel,
                                             color = colors.textSecondary
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(LaTheme.radii.shapeFull)
-                                            .background(
-                                                if (item.isCompleted) colors.tints.mint.base else colors.surfaceVariant
-                                            )
-                                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (item.isCompleted) "Done" else "Due today",
-                                            style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
-                                            color = colors.textPrimary
                                         )
                                     }
                                 }
@@ -870,56 +436,55 @@ fun HomeDashboardScreen(
                                 }
                             }
                         }
-                    }
-                }
-            }
 
-            // 8. Daily Review Tinted Tile (tint.rose.base)
-            item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaTintedTile(
-                        containerColor = colors.tints.rose.base,
-                        onClick = { onNavigateToDailyReview(today) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
+                        LaRowDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                        // Tasks subsection
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                LaIconChip(
-                                    icon = Icons.Outlined.RateReview,
-                                    onTintedSurface = true
+                            Text(
+                                text = "Tasks (${taskSummary.completedCount}/${taskSummary.totalCount})",
+                                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = "Manage",
+                                style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.accent,
+                                modifier = Modifier
+                                    .pressScaleClickable { onNavigateToPlanning(today) }
+                                    .padding(vertical = 2.dp, horizontal = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        if (todayTasks.isEmpty()) {
+                            Text(
+                                text = "No tasks planned for today",
+                                style = LaTheme.typography.label,
+                                color = colors.textSecondary
+                            )
+                        } else {
+                            val previewTasks = todayTasks.take(5)
+                            previewTasks.forEachIndexed { index, task ->
+                                HomeTaskListRow(
+                                    task = task,
+                                    onToggleComplete = { checked ->
+                                        scope.launch {
+                                            repository.setTaskCompleted(task.id, checked)
+                                                .onFailure { errorMessage = it.message }
+                                        }
+                                    },
+                                    onOpenPlanning = { onNavigateToPlanning(today) }
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = "Daily Review",
-                                        style = LaTheme.typography.sectionTitle,
-                                        color = colors.textPrimary
-                                    )
-                                    val statusSubtitle = when (todayReview?.status) {
-                                        ReviewStatus.COMPLETED -> "Completed for today • Tap to view or edit"
-                                        ReviewStatus.DRAFT -> "Draft saved for today • Tap to finish"
-                                        null -> "Reflect on today's summary in under a minute"
-                                    }
-                                    Text(
-                                        text = statusSubtitle,
-                                        style = LaTheme.typography.label,
-                                        color = colors.onTintSecondary
-                                    )
+                                if (index < previewTasks.lastIndex) {
+                                    LaRowDivider()
                                 }
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LaArrowButton(
-                                contentDescription = "Open Daily Review",
-                                onClick = { onNavigateToDailyReview(today) },
-                                onTintedSurface = true
-                            )
                         }
                     }
                 }
@@ -937,7 +502,7 @@ fun HomeDashboardScreen(
     if (drilldownDateEpoch != null) {
         val selectedDate = LocalDate.ofEpochDay(drilldownDateEpoch!!)
         val drilldown = remember(
-            selectedDate, today, allHabits, allCompletions, allTasks, allSessions, allTransactions, monthlyBudgetMinor
+            selectedDate, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
         ) {
             LifeAnalyticsEngine.buildDayDrilldown(
                 date = selectedDate,
@@ -945,7 +510,6 @@ fun HomeDashboardScreen(
                 habits = allHabits,
                 completions = allCompletions,
                 tasks = allTasks,
-                sessions = allSessions,
                 transactions = allTransactions,
                 monthlyBudgetMinor = monthlyBudgetMinor
             )
@@ -959,55 +523,6 @@ fun HomeDashboardScreen(
             onOpenFinanceForDate = onNavigateToFinanceDay
         )
     }
-
-    if (showAddTaskDialog) {
-        TaskFormDialog(
-            initialTask = null,
-            defaultDate = today,
-            onDismiss = { showAddTaskDialog = false },
-            onSave = { title, category, plannedDate, plannedTime, estimateMinutes, lifeArea ->
-                repository.createTask(
-                    title = title,
-                    category = category,
-                    plannedDate = plannedDate,
-                    plannedTime = plannedTime,
-                    estimatedDurationMinutes = estimateMinutes,
-                    lifeArea = lifeArea
-                ).map {
-                    showAddTaskDialog = false
-                    scope.launch { snackbarHostState.showSnackbar("Task saved") }
-                }
-            }
-        )
-    }
-
-    if (showAddExpenseDialog) {
-        TransactionFormDialog(
-            initialTransaction = null,
-            defaultType = TransactionType.EXPENSE,
-            defaultDate = today,
-            currencyCode = currencyCode,
-            onDismiss = { showAddExpenseDialog = false },
-            onSave = { type, amountMinor, category, date, note ->
-                scope.launch {
-                    repository.saveTransaction(
-                        transactionId = null,
-                        type = type,
-                        amountMinor = amountMinor,
-                        currencyCode = currencyCode,
-                        category = category,
-                        transactionDate = date,
-                        note = note
-                    ).onSuccess {
-                        showAddExpenseDialog = false
-                        snackbarHostState.showSnackbar("Expense saved")
-                    }.onFailure { err ->
-                        errorMessage = err.message ?: "Unable to save expense."
-                    }
-                }
-            }
-        )
-    }
 }
 
 @Composable
@@ -1016,7 +531,6 @@ private fun HomeWeekStrip(
     today: LocalDate,
     selectedDay: LocalDate,
     weekTasks: List<Task>,
-    weekSessions: List<com.lifeanalytics.app.domain.model.FocusSession>,
     weekHabitCompletions: List<com.lifeanalytics.app.domain.model.HabitCompletion>,
     onSelectDay: (Int, LocalDate) -> Unit
 ) {
@@ -1030,13 +544,10 @@ private fun HomeWeekStrip(
             val isToday = date == today
             val isSelected = date == selectedDay
             val hasCompletedTask = weekTasks.any { it.plannedDate == date && it.isCompleted }
-            val hasCompletedFocus = weekSessions.any {
-                it.startedLocalDate == date && it.status == FocusSessionStatus.COMPLETED
-            }
             val hasCompletedHabit = weekHabitCompletions.any {
                 it.completionDate == date && it.isCompleted
             }
-            val hasAnyActivity = hasCompletedTask || hasCompletedFocus || hasCompletedHabit
+            val hasAnyActivity = hasCompletedTask || hasCompletedHabit
 
             val tileBg = when {
                 isToday -> colors.tints.lavender.strong
@@ -1047,7 +558,7 @@ private fun HomeWeekStrip(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .height(60.dp)
+                    .height(58.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(tileBg)
                     .pressScaleClickable { onSelectDay(idx, date) }
@@ -1097,7 +608,6 @@ private fun HomeWeekStrip(
 private fun HomeTaskListRow(
     task: Task,
     onToggleComplete: (Boolean) -> Unit,
-    onStartFocus: () -> Unit,
     onOpenPlanning: () -> Unit
 ) {
     val colors = LaTheme.colors
@@ -1106,7 +616,7 @@ private fun HomeTaskListRow(
         modifier = Modifier
             .fillMaxWidth()
             .pressScaleClickable(onClick = onOpenPlanning)
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         LaAnimatedCheckbox(
@@ -1114,37 +624,22 @@ private fun HomeTaskListRow(
             onCheckedChange = onToggleComplete
         )
         Spacer(modifier = Modifier.width(4.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = task.title,
-                style = LaTheme.typography.body.copy(
-                    fontWeight = FontWeight.Medium,
-                    textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                ),
-                color = if (task.isCompleted) colors.textSecondary else colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            val metaParts = buildList {
-                add(task.lifeArea?.shortName ?: "Unclassified")
-                add(task.category.displayName)
-                task.plannedTime?.let { add(DateAttributionPolicy.formatDisplayTime(it)) }
-                task.estimatedDurationMinutes?.let { add(DateAttributionPolicy.formatMinutes(it)) }
-            }
-            Text(
-                text = metaParts.joinToString(" • "),
-                style = LaTheme.typography.chartMicroLabel,
-                color = colors.textSecondary
-            )
-        }
-        if (!task.isCompleted) {
-            Spacer(modifier = Modifier.width(8.dp))
-            LaCircularIconButton(
-                icon = Icons.Outlined.PlayArrow,
-                contentDescription = "Start focus on ${task.title}",
-                onClick = onStartFocus,
-                size = 44.dp
-            )
-        }
+        Text(
+            text = task.title,
+            style = LaTheme.typography.body.copy(
+                fontWeight = FontWeight.Medium,
+                textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+            ),
+            color = if (task.isCompleted) colors.textSecondary else colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = task.lifeArea?.shortName ?: task.category.displayName,
+            style = LaTheme.typography.chartMicroLabel,
+            color = colors.textSecondary
+        )
     }
 }

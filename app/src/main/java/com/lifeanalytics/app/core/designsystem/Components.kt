@@ -2030,14 +2030,12 @@ fun LaPillarVerdictRow(
 // -----------------------------------------------------------------------------
 
 @Composable
-fun LaLifeScoreOverviewPanel(
+fun LaOverallPerformanceCard(
     performance: com.lifeanalytics.app.domain.analytics.PeriodLifePerformance,
-    currencyCode: String,
     selectedWindow: com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow,
     onSelectWindow: (com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow) -> Unit,
     modifier: Modifier = Modifier,
-    showWindowSelector: Boolean = true,
-    onNavigateToInsights: (() -> Unit)? = null
+    showWindowSelector: Boolean = true
 ) {
     val colors = LaTheme.colors
     val spacing = LaTheme.spacing
@@ -2048,9 +2046,9 @@ fun LaLifeScoreOverviewPanel(
             .clip(LaTheme.radii.shapeMd)
             .background(colors.surface)
             .padding(spacing.tilePadding),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Header row: Title + Data Coverage Pill
+        // Header row: Concise Title + Coverage Badge
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2058,7 +2056,7 @@ fun LaLifeScoreOverviewPanel(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Overall life performance",
+                    text = "Overall performance",
                     style = LaTheme.typography.sectionTitle,
                     color = colors.textPrimary
                 )
@@ -2078,10 +2076,10 @@ fun LaLifeScoreOverviewPanel(
                             colors.surfaceVariant
                         }
                     )
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = performance.dataCoverageText,
+                    text = "${performance.availableCategoryCount} of 3 areas",
                     style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.textPrimary
                 )
@@ -2103,7 +2101,7 @@ fun LaLifeScoreOverviewPanel(
                             .clip(LaTheme.radii.shapeFull)
                             .background(bg)
                             .pressScaleClickable(onClick = { onSelectWindow(win) })
-                            .padding(vertical = 7.dp),
+                            .padding(vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -2135,7 +2133,7 @@ fun LaLifeScoreOverviewPanel(
                     text = if (performance.overallScore != null) {
                         "${performance.overallScore} / 100"
                     } else {
-                        "Not enough data yet"
+                        "No score yet"
                     },
                     style = if (performance.overallScore != null) {
                         LaTheme.typography.metricValue
@@ -2145,13 +2143,12 @@ fun LaLifeScoreOverviewPanel(
                     color = colors.textPrimary
                 )
                 val changeLine = when {
-                    performance.overallScore == null ->
-                        "Assign life areas to your tasks & habits or set a monthly budget to calculate your score."
+                    performance.overallScore == null -> "No classified data in period"
                     deltaPts != null -> {
                         val sign = if (deltaPts >= 0) "+" else ""
                         "$sign$deltaPts pts ${performance.comparisonLabel}"
                     }
-                    else -> "No previous period score for comparison yet"
+                    else -> "Baseline period"
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -2177,121 +2174,133 @@ fun LaLifeScoreOverviewPanel(
                 }
             }
         }
+    }
+}
 
-        // 3 Life Area Category Breakdowns
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            LaLifeCategoryBreakdownRow(
-                title = "Health & Lifestyle",
-                score = performance.health.score,
-                isPartial = false,
-                primaryDetail = if (performance.health.hasScheduledData) {
-                    "${performance.health.completedCount} of ${performance.health.scheduledCount} scheduled health habits completed"
-                } else {
-                    performance.health.summaryText
-                },
-                secondaryDetail = if (performance.health.activeHabitCount > 0 && !performance.health.hasScheduledData) {
-                    "${performance.health.activeHabitCount} active health habit(s) not due in this window"
-                } else null,
-                tint = colors.tints.mint
-            )
+@Composable
+fun LaCategoryPerformancePanel(
+    performance: com.lifeanalytics.app.domain.analytics.PeriodLifePerformance,
+    currencyCode: String,
+    modifier: Modifier = Modifier
+) {
+    val colors = LaTheme.colors
+    val spacing = LaTheme.spacing
 
-            LaRowDivider()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(LaTheme.radii.shapeMd)
+            .background(colors.surface)
+            .padding(spacing.tilePadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "Category performance",
+            style = LaTheme.typography.sectionTitle,
+            color = colors.textPrimary
+        )
 
-            val careerPrimary = buildString {
-                if (performance.career.hasHabitData || performance.career.hasTaskData) {
-                    val parts = mutableListOf<String>()
-                    if (performance.career.hasHabitData) {
-                        parts.add("Habits: ${performance.career.habitCompletedCount}/${performance.career.habitScheduledCount} (${performance.career.habitScore}%)")
-                    }
-                    if (performance.career.hasTaskData) {
-                        parts.add("Tasks: ${performance.career.taskCompletedCount}/${performance.career.taskPlannedCount} (${performance.career.taskScore}%)")
-                    }
-                    append(parts.joinToString(" • "))
-                } else {
-                    append(performance.career.summaryText)
+        val healthDetail = if (performance.health.hasScheduledData) {
+            "Habits ${performance.health.completedCount}/${performance.health.scheduledCount}"
+        } else {
+            "No scheduled habits"
+        }
+
+        LaLifeCategoryBreakdownRow(
+            title = "Health & Lifestyle",
+            score = performance.health.score,
+            isPartial = false,
+            primaryDetail = healthDetail,
+            secondaryDetail = null,
+            tint = colors.tints.mint
+        )
+
+        LaRowDivider()
+
+        val careerPrimary = buildString {
+            if (performance.career.hasHabitData || performance.career.hasTaskData) {
+                val parts = mutableListOf<String>()
+                if (performance.career.hasHabitData) {
+                    parts.add("Habits ${performance.career.habitCompletedCount}/${performance.career.habitScheduledCount}")
                 }
-            }
-            val careerSecondary = when {
-                performance.career.hasHabitData && performance.career.hasTaskData ->
-                    "Weighted 40% career habits + 60% career tasks"
-                performance.career.isPartial && performance.career.hasHabitData ->
-                    "Partial coverage (habits only; no career tasks planned)"
-                performance.career.isPartial && performance.career.hasTaskData ->
-                    "Partial coverage (tasks only; no career habits scheduled)"
-                else -> null
-            }
-
-            LaLifeCategoryBreakdownRow(
-                title = "Career & Productivity",
-                score = performance.career.score,
-                isPartial = performance.career.isPartial,
-                primaryDetail = careerPrimary,
-                secondaryDetail = careerSecondary,
-                tint = colors.tints.lavender
-            )
-
-            LaRowDivider()
-
-            val fin = performance.finance
-            val financePrimary = if (fin.hasFinanceActivity) {
-                val inc = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(fin.totalIncomeMinor, currencyCode)
-                val exp = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(fin.totalExpenseMinor, currencyCode)
-                val net = com.lifeanalytics.app.core.common.MoneyUtils.formatSignedNetMinorUnits(fin.netCashFlowMinor, currencyCode)
-                "Income $inc • Expenses $exp • Net $net"
+                if (performance.career.hasTaskData) {
+                    parts.add("Tasks ${performance.career.taskCompletedCount}/${performance.career.taskPlannedCount}")
+                }
+                append(parts.joinToString(" • "))
             } else {
-                "No finance transactions recorded in this period"
+                append("No classified activity")
             }
-            val financeSecondary = buildString {
-                val items = mutableListOf<String>()
-                if (fin.savingsRatePercent != null) {
-                    items.add("Savings rate: ${fin.savingsRatePercent}%")
-                } else if (fin.hasFinanceActivity) {
-                    items.add("Savings rate: N/A (no income recorded)")
-                }
-                if (fin.periodBudgetTargetMinor != null && fin.periodBudgetTargetMinor > 0L) {
-                    val budgetFormatted = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(
-                        fin.periodBudgetTargetMinor,
-                        currencyCode
-                    )
-                    items.add("Period budget: $budgetFormatted")
-                } else {
-                    items.add("Set a monthly budget in Finance to enable Finance score")
-                }
-                append(items.joinToString(" • "))
-            }
+        }
+        val careerSecondary = when {
+            performance.career.hasHabitData && performance.career.hasTaskData -> "40% habits • 60% tasks"
+            performance.career.isPartial && performance.career.hasHabitData -> "Habits only"
+            performance.career.isPartial && performance.career.hasTaskData -> "Tasks only"
+            else -> null
+        }
 
-            LaLifeCategoryBreakdownRow(
-                title = "Finance & Wealth",
-                score = fin.score,
-                isPartial = false,
-                primaryDetail = financePrimary,
-                secondaryDetail = financeSecondary,
-                tint = colors.tints.blue
+        LaLifeCategoryBreakdownRow(
+            title = "Career & Productivity",
+            score = performance.career.score,
+            isPartial = performance.career.isPartial,
+            primaryDetail = careerPrimary,
+            secondaryDetail = careerSecondary,
+            tint = colors.tints.lavender
+        )
+
+        LaRowDivider()
+
+        val fin = performance.finance
+        val financePrimary = if (fin.hasFinanceActivity) {
+            val net = com.lifeanalytics.app.core.common.MoneyUtils.formatSignedNetMinorUnits(fin.netCashFlowMinor, currencyCode)
+            val exp = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(fin.totalExpenseMinor, currencyCode)
+            val sav = fin.savingsRatePercent?.let { " • Savings $it%" } ?: ""
+            "Net $net • Spent $exp$sav"
+        } else {
+            "No transactions"
+        }
+        val financeSecondary = if (fin.periodBudgetTargetMinor != null && fin.periodBudgetTargetMinor > 0L) {
+            val budgetFormatted = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(
+                fin.periodBudgetTargetMinor,
+                currencyCode
             )
-        }
+            "Budget $budgetFormatted"
+        } else null
 
-        if (onNavigateToInsights != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .pressScaleClickable(onClick = onNavigateToInsights),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Explore full analytics",
-                    style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.textPrimary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                    contentDescription = null,
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-        }
+        LaLifeCategoryBreakdownRow(
+            title = "Finance & Wealth",
+            score = fin.score,
+            isPartial = false,
+            primaryDetail = financePrimary,
+            secondaryDetail = financeSecondary,
+            tint = colors.tints.blue
+        )
+    }
+}
+
+@Composable
+fun LaLifeScoreOverviewPanel(
+    performance: com.lifeanalytics.app.domain.analytics.PeriodLifePerformance,
+    currencyCode: String,
+    selectedWindow: com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow,
+    onSelectWindow: (com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow) -> Unit,
+    modifier: Modifier = Modifier,
+    showWindowSelector: Boolean = true,
+    onNavigateToInsights: (() -> Unit)? = null
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(LaTheme.spacing.space3)
+    ) {
+        LaOverallPerformanceCard(
+            performance = performance,
+            selectedWindow = selectedWindow,
+            onSelectWindow = onSelectWindow,
+            showWindowSelector = showWindowSelector
+        )
+        LaCategoryPerformancePanel(
+            performance = performance,
+            currencyCode = currencyCode
+        )
     }
 }
 
@@ -2334,7 +2343,7 @@ fun LaLifeCategoryBreakdownRow(
                             .padding(horizontal = 8.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = "Partial data",
+                            text = "Partial",
                             style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
                             color = colors.textPrimary
                         )
@@ -2349,7 +2358,7 @@ fun LaLifeCategoryBreakdownRow(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = if (score != null) "$score / 100" else "Not enough data",
+                    text = if (score != null) "$score / 100" else "—",
                     style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.Bold),
                     color = if (score != null) colors.textPrimary else colors.textSecondary
                 )
@@ -2364,17 +2373,23 @@ fun LaLifeCategoryBreakdownRow(
             )
         }
 
-        Text(
-            text = primaryDetail,
-            style = LaTheme.typography.label,
-            color = colors.textSecondary
-        )
-        if (!secondaryDetail.isNullOrBlank()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = secondaryDetail,
-                style = LaTheme.typography.chartMicroLabel,
-                color = colors.onTintSecondary
+                text = primaryDetail,
+                style = LaTheme.typography.label,
+                color = colors.textSecondary
             )
+            if (!secondaryDetail.isNullOrBlank()) {
+                Text(
+                    text = secondaryDetail,
+                    style = LaTheme.typography.chartMicroLabel,
+                    color = colors.onTintSecondary
+                )
+            }
         }
     }
 }
@@ -2385,7 +2400,7 @@ fun LaDayDrilldownBottomSheet(
     drilldown: com.lifeanalytics.app.domain.analytics.DayLifeDrilldown,
     currencyCode: String,
     onDismiss: () -> Unit,
-    onOpenPlanningForDate: (( java.time.LocalDate) -> Unit)? = null,
+    onOpenPlanningForDate: ((java.time.LocalDate) -> Unit)? = null,
     onOpenHabitsForDate: ((java.time.LocalDate) -> Unit)? = null,
     onOpenFinanceForDate: ((java.time.LocalDate) -> Unit)? = null
 ) {
@@ -2418,12 +2433,10 @@ fun LaDayDrilldownBottomSheet(
                         color = colors.textPrimary
                     )
                     val stateSubtitle = when (drilldown.state) {
-                        com.lifeanalytics.app.domain.analytics.YearDayState.FUTURE ->
-                            "Future calendar date • Not yet elapsed"
-                        com.lifeanalytics.app.domain.analytics.YearDayState.ELAPSED_NO_DATA ->
-                            "Elapsed date • No scored life-area activity recorded"
+                        com.lifeanalytics.app.domain.analytics.YearDayState.FUTURE -> "Future date"
+                        com.lifeanalytics.app.domain.analytics.YearDayState.ELAPSED_NO_DATA -> "No scored activity"
                         com.lifeanalytics.app.domain.analytics.YearDayState.ELAPSED_SCORED ->
-                            "Daily Life Score • ${drilldown.performance.dataCoverageText}"
+                            "${drilldown.performance.availableCategoryCount} of 3 areas tracked"
                     }
                     Text(
                         text = stateSubtitle,
@@ -2470,7 +2483,9 @@ fun LaDayDrilldownBottomSheet(
                         title = "Health & Lifestyle",
                         score = drilldown.performance.health.score,
                         isPartial = false,
-                        primaryDetail = drilldown.performance.health.summaryText,
+                        primaryDetail = if (drilldown.performance.health.hasScheduledData) {
+                            "Habits ${drilldown.performance.health.completedCount}/${drilldown.performance.health.scheduledCount}"
+                        } else "No scheduled habits",
                         secondaryDetail = null,
                         tint = colors.tints.mint
                     )
@@ -2497,19 +2512,19 @@ fun LaDayDrilldownBottomSheet(
 
             // Source records for this date
             Text(
-                text = "Recorded activity on this date",
+                text = "Activity",
                 style = LaTheme.typography.sectionTitle,
                 color = colors.textPrimary
             )
 
             // 1. Habits due on date
             val dueStr = if (drilldown.dueHabits.isEmpty()) {
-                "No scheduled habits due on this date"
+                "None scheduled"
             } else {
                 val doneCount = drilldown.dueHabits.count { it.second }
-                "$doneCount of ${drilldown.dueHabits.size} scheduled habit(s) completed: " +
+                "$doneCount/${drilldown.dueHabits.size} done • " +
                     drilldown.dueHabits.joinToString(", ") { (h, done) ->
-                        "${h.name} (${if (done) "Done" else "Missed"})"
+                        "${h.name} (${if (done) "✓" else "—"})"
                     }
             }
             Text(
@@ -2520,12 +2535,12 @@ fun LaDayDrilldownBottomSheet(
 
             // 2. Tasks planned on date
             val taskStr = if (drilldown.tasksForDate.isEmpty()) {
-                "No tasks planned for this date"
+                "None planned"
             } else {
                 val doneCount = drilldown.tasksForDate.count { it.isCompleted }
-                "$doneCount of ${drilldown.tasksForDate.size} task(s) completed: " +
+                "$doneCount/${drilldown.tasksForDate.size} done • " +
                     drilldown.tasksForDate.joinToString(", ") { t ->
-                        "${t.title} (${if (t.isCompleted) "Done" else "Open"})"
+                        "${t.title} (${if (t.isCompleted) "✓" else "—"})"
                     }
             }
             Text(
@@ -2534,21 +2549,9 @@ fun LaDayDrilldownBottomSheet(
                 color = colors.textSecondary
             )
 
-            // 3. Focus time on date
-            val focusStr = if (drilldown.completedFocusSeconds > 0L) {
-                com.lifeanalytics.app.core.time.DateAttributionPolicy.formatDurationSeconds(drilldown.completedFocusSeconds)
-            } else {
-                "0m recorded"
-            }
-            Text(
-                text = "• Focused work: $focusStr",
-                style = LaTheme.typography.label,
-                color = colors.textSecondary
-            )
-
-            // 4. Finance transactions on date
+            // 3. Finance transactions on date
             val finStr = if (drilldown.transactionsForDate.isEmpty()) {
-                "No transactions recorded"
+                "No transactions"
             } else {
                 val inc = com.lifeanalytics.app.core.common.MoneyUtils.formatMinorUnits(
                     drilldown.performance.finance.totalIncomeMinor,
@@ -2558,7 +2561,7 @@ fun LaDayDrilldownBottomSheet(
                     drilldown.performance.finance.totalExpenseMinor,
                     currencyCode
                 )
-                "${drilldown.transactionsForDate.size} entry(s) • Income $inc • Expenses $exp"
+                "${drilldown.transactionsForDate.size} entry(s) • +$inc / -$exp"
             }
             Text(
                 text = "• Finance: $finStr",
@@ -2573,7 +2576,7 @@ fun LaDayDrilldownBottomSheet(
                 ) {
                     if (onOpenPlanningForDate != null) {
                         LaSecondaryButton(
-                            text = "Tasks",
+                            text = "Open Tasks",
                             onClick = {
                                 onDismiss()
                                 onOpenPlanningForDate(drilldown.date)
@@ -2583,7 +2586,7 @@ fun LaDayDrilldownBottomSheet(
                     }
                     if (onOpenHabitsForDate != null) {
                         LaSecondaryButton(
-                            text = "Habits",
+                            text = "Open Habits",
                             onClick = {
                                 onDismiss()
                                 onOpenHabitsForDate(drilldown.date)
@@ -2593,7 +2596,7 @@ fun LaDayDrilldownBottomSheet(
                     }
                     if (onOpenFinanceForDate != null) {
                         LaSecondaryButton(
-                            text = "Finance",
+                            text = "Open Finance",
                             onClick = {
                                 onDismiss()
                                 onOpenFinanceForDate(drilldown.date)

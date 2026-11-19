@@ -263,4 +263,132 @@ class LifeAnalyticsIntegrationTest {
         }
         assertTrue("Manifest must declare INTERNET for cloud backup", requested.contains(android.Manifest.permission.INTERNET))
     }
+
+    @Test
+    fun sampleDataset_seedsOctober2026WithVariationPreservesPersonalDataAndPopulatesHeatmap() = runBlocking {
+        // Set reference clock to 2026-11-19T09:00:00Z
+        fakeEpochMillis = java.time.LocalDate.of(2026, 11, 19)
+            .atTime(9, 0)
+            .atZone(ZoneId.of("UTC"))
+            .toInstant()
+            .toEpochMilli()
+        val today = timeProvider.todayLocalDate()
+        assertEquals(java.time.LocalDate.of(2026, 11, 19), today)
+
+        // 1. Insert a personal user task and personal habit first
+        val personalTask = repository.createTask(
+            title = "Personal real user task",
+            category = TaskCategory.PERSONAL,
+            plannedDate = today,
+            plannedTime = null,
+            estimatedDurationMinutes = 25,
+            lifeArea = com.lifeanalytics.app.domain.model.LifeArea.CAREER_PRODUCTIVITY
+        ).getOrThrow()
+
+        val personalHabit = repository.createHabit(
+            name = "Personal real habit",
+            weekdays = DayOfWeek.entries.toSet(),
+            effectiveFrom = today.minusDays(5),
+            lifeArea = com.lifeanalytics.app.domain.model.LifeArea.HEALTH_LIFESTYLE
+        ).getOrThrow()
+
+        assertFalse(repository.hasDemoSampleData())
+
+        // 2. Seed the October 2026 sample dataset
+        val summary1 = repository.seedDemoSampleMonth("INR").getOrThrow()
+        assertEquals("October 2026", summary1.monthLabel)
+        assertEquals(5, summary1.habitsSeeded)
+        assertTrue(summary1.tasksSeeded >= 50)
+        assertTrue(summary1.habitCompletionsSeeded >= 60)
+        assertTrue(summary1.transactionsSeeded >= 15)
+        assertTrue(repository.hasDemoSampleData())
+
+        // 3. Re-run seedDemoSampleMonth to verify idempotency (no duplicate records)
+        val totalTasksAfterFirstSeed = repository.observeAllTasks().first().size
+        val totalHabitsAfterFirstSeed = repository.observeAllHabits().first().size
+        val totalTxAfterFirstSeed = repository.observeAllTransactions().first().size
+
+        repository.seedDemoSampleMonth("INR").getOrThrow()
+        assertEquals(totalTasksAfterFirstSeed, repository.observeAllTasks().first().size)
+        assertEquals(totalHabitsAfterFirstSeed, repository.observeAllHabits().first().size)
+        assertEquals(totalTxAfterFirstSeed, repository.observeAllTransactions().first().size)
+
+        // 4. Verify 365-day heatmap and October 2026 analytics calculated via real LifeAnalyticsEngine
+        val allHabits = repository.observeAllHabits().first()
+        val allCompletions = repository.observeAllHabitCompletions().first()
+        val allTasks = repository.observeAllTasks().first()
+        val allTransactions = repository.observeAllTransactions().first()
+        val demoBudget = com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR
+
+        val octPerformance = com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine.evaluatePeriodPerformance(
+            window = com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow.MONTHLY,
+            anchorDate = java.time.LocalDate.of(2026, 10, 15),
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = demoBudget,
+            computeComparison = false
+        )
+
+        // All 3 life areas (Health, Career, Finance) must have valid calculated scores in October 2026
+        assertEquals(3, octPerformance.availableCategoryCount)
+        assertNotNull(octPerformance.overallScore)
+        assertNotNull(octPerformance.health.score)
+        assertNotNull(octPerformance.career.score)
+        assertNotNull(octPerformance.finance.score)
+        assertFalse(octPerformance.career.isPartial)
+
+        val heatmap = com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine.buildYearCalendar(
+            year = 2026,
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = demoBudget
+        )
+        assertEquals(365, heatmap.totalDaysInYear)
+
+        val octCells = heatmap.days.filter {
+            it.date.monthValue == 10
+        }
+        assertEquals(31, octCells.size)
+
+        // Verify variation across October 2026:
+        // - Unrecorded rest days (Oct 11 & Oct 25) have ELAPSED_NO_DATA and null score
+        val oct11 = octCells.first { it.date.dayOfMonth == 11 }
+        val oct25 = octCells.first { it.date.dayOfMonth == 25 }
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_NO_DATA, oct11.state)
+        assertEquals(null, oct11.overallScore)
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_NO_DATA, oct25.state)
+        assertEquals(null, oct25.overallScore)
+
+        // - Low-performance day (Oct 5) has lower score and lower intensity than high-performance day (Oct 1)
+        val oct1 = octCells.first { it.date.dayOfMonth == 1 }
+        val oct2 = octCells.first { it.date.dayOfMonth == 2 }
+        val oct5 = octCells.first { it.date.dayOfMonth == 5 }
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_SCORED, oct1.state)
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_SCORED, oct2.state)
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_SCORED, oct5.state)
+        assertTrue("High day Oct 1 (${oct1.overallScore}) must exceed Average day Oct 2 (${oct2.overallScore})", oct1.overallScore!! > oct2.overallScore!!)
+        assertTrue("Average day Oct 2 (${oct2.overallScore}) must exceed Low day Oct 5 (${oct5.overallScore})", oct2.overallScore!! > oct5.overallScore!!)
+
+        // - Future days (after Nov 19, 2026) have FUTURE state
+        val dec1 = heatmap.days.first { it.date == java.time.LocalDate.of(2026, 12, 1) }
+        assertEquals(com.lifeanalytics.app.domain.analytics.YearCalendarDayState.FUTURE, dec1.state)
+
+        // 5. Remove demo data and verify personal records remain completely intact
+        repository.removeDemoSampleMonth().getOrThrow()
+        assertFalse(repository.hasDemoSampleData())
+
+        val remainingTasks = repository.observeAllTasks().first()
+        val remainingHabits = repository.observeAllHabits().first()
+        assertEquals(1, remainingTasks.size)
+        assertEquals(personalTask.id, remainingTasks.first().id)
+        assertEquals(1, remainingHabits.size)
+        assertEquals(personalHabit.id, remainingHabits.first().id)
+    }
 }
+

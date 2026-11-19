@@ -237,12 +237,16 @@ fun DailyReviewScreen(
                             } else null
                         )
                         LaStatTile(
-                            label = "Focused time",
-                            value = DateAttributionPolicy.formatSummaryDuration(completedFocusSeconds),
-                            supportingText = "${sessionsForDate.count { it.status == FocusSessionStatus.COMPLETED }} session(s)",
-                            icon = Icons.Outlined.Timer,
+                            label = "Net cash flow",
+                            value = MoneyUtils.formatSignedNetMinorUnits(financeSummary.netForPeriodMinor, currencyCode),
+                            supportingText = if (financeSummary.savingsRatePercent != null) {
+                                "Savings rate: ${financeSummary.savingsRatePercent}%"
+                            } else {
+                                "Income: ${MoneyUtils.formatMinorUnits(financeSummary.totalIncomeMinor, currencyCode)}"
+                            },
+                            icon = Icons.Outlined.AccountBalanceWallet,
                             containerColor = tints.mint.base,
-                            isEmptyValue = completedFocusSeconds == 0L,
+                            isEmptyValue = !financeSummary.hasTransactions,
                             minHeight = 148.dp,
                             modifier = Modifier.weight(1f)
                         )
@@ -292,9 +296,9 @@ fun DailyReviewScreen(
                 }
             }
 
-        // Planned vs Actual Tasks Section
+        // Planned Tasks Section
         item {
-            LaContainerPanel(title = "Planned vs Actual") {
+            LaContainerPanel(title = "Planned tasks") {
                 if (tasksForDate.isEmpty()) {
                     Text(
                         text = "No tasks were planned for this date.",
@@ -303,9 +307,6 @@ fun DailyReviewScreen(
                     )
                 } else {
                     tasksForDate.forEachIndexed { index, task ->
-                        val linkedFocusSeconds = sessionsForDate
-                            .filter { it.taskId == task.id && it.status == FocusSessionStatus.COMPLETED }
-                            .sumOf { it.focusedDurationSeconds }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -350,16 +351,13 @@ fun DailyReviewScreen(
                                     style = typography.body.copy(fontWeight = FontWeight.Medium),
                                     color = colors.textPrimary
                                 )
+                                val areaLabel = task.lifeArea?.shortName ?: task.category.displayName
                                 val plannedText = task.estimatedDurationMinutes?.let {
-                                    "Planned: ${DateAttributionPolicy.formatMinutes(it)}"
+                                    "Est. ${DateAttributionPolicy.formatMinutes(it)}"
                                 } ?: "No duration estimate"
-                                val actualText = if (linkedFocusSeconds > 0L) {
-                                    "Linked focus: ${DateAttributionPolicy.formatDurationSeconds(linkedFocusSeconds)}"
-                                } else {
-                                    "No focus session linked"
-                                }
+                                val statusText = if (task.isCompleted) "Completed" else "Incomplete"
                                 Text(
-                                    text = "$plannedText • $actualText",
+                                    text = "$areaLabel • $plannedText • $statusText",
                                     style = typography.label,
                                     color = colors.textSecondary
                                 )
