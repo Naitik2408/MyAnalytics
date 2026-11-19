@@ -96,6 +96,7 @@ fun LifeAnalyticsApp(
                 HomeDashboardScreen(
                     repository = repository,
                     currencyCode = preferences.currencyCode,
+                    monthlyBudgetMinor = preferences.monthlyBudgetMinor,
                     onNavigateToPlanning = { date ->
                         planningDateEpoch = date.toEpochDay()
                         navController.navigate("planning")
@@ -139,6 +140,10 @@ fun LifeAnalyticsApp(
                 FinanceScreen(
                     repository = repository,
                     currencyCode = preferences.currencyCode,
+                    monthlyBudgetMinor = preferences.monthlyBudgetMinor,
+                    onUpdateMonthlyBudget = { budgetMinor ->
+                        preferencesRepository.setMonthlyBudgetMinor(budgetMinor)
+                    },
                     initialDayFilter = financeDayFilterEpoch?.let { LocalDate.ofEpochDay(it) }
                 )
             }
@@ -168,7 +173,8 @@ fun LifeAnalyticsApp(
             composable(PrimaryDestination.INSIGHTS.route) {
                 InsightsScreen(
                     repository = repository,
-                    currencyCode = preferences.currencyCode
+                    currencyCode = preferences.currencyCode,
+                    monthlyBudgetMinor = preferences.monthlyBudgetMinor
                 )
             }
 

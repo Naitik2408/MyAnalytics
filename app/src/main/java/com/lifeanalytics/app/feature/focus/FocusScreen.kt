@@ -102,6 +102,7 @@ fun FocusScreen(
     var startMode by rememberSaveable { mutableStateOf(StartFocusMode.EXISTING_TASK) }
     var selectedTaskId by rememberSaveable { mutableStateOf<String?>(null) }
     var newTaskTitle by rememberSaveable { mutableStateOf("") }
+    var newTaskLifeArea by rememberSaveable { mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(null) }
     var newTaskCategory by rememberSaveable { mutableStateOf(TaskCategory.STUDY) }
     var generalDescription by rememberSaveable { mutableStateOf("") }
     var selectedPresetMinutes by rememberSaveable { mutableStateOf(25) }
@@ -480,6 +481,34 @@ fun FocusScreen(
                                         singleLine = true
                                     )
                                     Spacer(modifier = Modifier.height(spacing.space2))
+                                    Text(
+                                        text = "Life Area *",
+                                        style = typography.label,
+                                        color = colors.textSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(spacing.space1))
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                                        verticalArrangement = Arrangement.spacedBy(spacing.space2)
+                                    ) {
+                                        com.lifeanalytics.app.domain.model.LifeArea.entries.forEach { area ->
+                                            LaFilterChip(
+                                                label = area.displayName,
+                                                selected = newTaskLifeArea == area,
+                                                onClick = {
+                                                    newTaskLifeArea = area
+                                                    errorMessage = null
+                                                }
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(spacing.space2))
+                                    Text(
+                                        text = "Category",
+                                        style = typography.label,
+                                        color = colors.textSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(spacing.space1))
                                     FlowRow(
                                         horizontalArrangement = Arrangement.spacedBy(spacing.space2),
                                         verticalArrangement = Arrangement.spacedBy(spacing.space2)
@@ -501,13 +530,19 @@ fun FocusScreen(
                                 enabled = !isActionInProgress,
                                 modifier = Modifier.fillMaxWidth(),
                                 onClick = {
+                                    val chosenArea = newTaskLifeArea
+                                    if (chosenArea == null) {
+                                        errorMessage = "Select a Life Area before saving the new task."
+                                        return@LaPrimaryButton
+                                    }
                                     isActionInProgress = true
                                     errorMessage = null
                                     scope.launch {
                                         repository.createTaskAndStartFocus(
                                             title = newTaskTitle,
                                             category = newTaskCategory,
-                                            plannedDate = today
+                                            plannedDate = today,
+                                            lifeArea = chosenArea
                                         ).onSuccess {
                                             newTaskTitle = ""
                                         }.onFailure {

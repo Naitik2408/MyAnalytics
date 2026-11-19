@@ -58,6 +58,17 @@ data class FinancePeriodSummary(
     val expensesByCategoryMinor: Map<String, Long>
 ) {
     val hasTransactions: Boolean get() = transactionCount > 0
+    val savingsAmountMinor: Long get() = totalIncomeMinor - totalExpenseMinor
+    /**
+     * Savings rate = ((income - expenses) / income) * 100, ONLY when income > 0
+     * (docs/08_FINANCE.md & docs/09_LIFE_ANALYTICS.md 19 Nov 2026 update).
+     */
+    val savingsRatePercent: Int?
+        get() = if (totalIncomeMinor > 0L) {
+            (((totalIncomeMinor - totalExpenseMinor) * 100.0) / totalIncomeMinor).toInt()
+        } else {
+            null
+        }
 }
 
 data class PeriodComparison(

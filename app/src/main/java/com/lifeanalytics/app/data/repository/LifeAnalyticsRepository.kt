@@ -26,6 +26,7 @@ import com.lifeanalytics.app.domain.model.Habit
 import com.lifeanalytics.app.domain.model.HabitCompletion
 import com.lifeanalytics.app.domain.model.HabitSchedulePeriod
 import com.lifeanalytics.app.domain.model.HabitScheduleType
+import com.lifeanalytics.app.domain.model.LifeArea
 import com.lifeanalytics.app.domain.model.ReviewStatus
 import com.lifeanalytics.app.domain.model.Task
 import com.lifeanalytics.app.domain.model.TaskCategory
@@ -83,7 +84,8 @@ class LifeAnalyticsRepository(
         category: TaskCategory,
         plannedDate: LocalDate,
         plannedTime: LocalTime? = null,
-        estimatedDurationMinutes: Int? = null
+        estimatedDurationMinutes: Int? = null,
+        lifeArea: LifeArea? = null
     ): Result<Task> {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isEmpty()) {
@@ -107,7 +109,8 @@ class LifeAnalyticsRepository(
             completedAtEpochMillis = null,
             sortOrder = existingCount,
             createdAtEpochMillis = now,
-            updatedAtEpochMillis = now
+            updatedAtEpochMillis = now,
+            lifeArea = lifeArea?.name
         )
         taskDao.upsertTask(entity)
         return Result.success(entity.toDomain())
@@ -119,7 +122,8 @@ class LifeAnalyticsRepository(
         category: TaskCategory,
         plannedDate: LocalDate,
         plannedTime: LocalTime?,
-        estimatedDurationMinutes: Int?
+        estimatedDurationMinutes: Int?,
+        lifeArea: LifeArea? = null
     ): Result<Task> {
         val trimmedTitle = title.trim()
         if (trimmedTitle.isEmpty()) {
@@ -138,7 +142,8 @@ class LifeAnalyticsRepository(
             plannedDate = DateAttributionPolicy.formatIsoDate(plannedDate),
             plannedTime = plannedTime?.let { DateAttributionPolicy.formatLocalTime(it) },
             estimatedDurationMinutes = estimatedDurationMinutes,
-            updatedAtEpochMillis = now
+            updatedAtEpochMillis = now,
+            lifeArea = lifeArea?.name ?: existing.lifeArea
         )
         taskDao.upsertTask(updated)
         return Result.success(updated.toDomain())
@@ -250,7 +255,8 @@ class LifeAnalyticsRepository(
         title: String,
         category: TaskCategory,
         plannedDate: LocalDate,
-        estimatedDurationMinutes: Int? = null
+        estimatedDurationMinutes: Int? = null,
+        lifeArea: LifeArea? = null
     ): Result<FocusSession> = database.withTransaction {
         val unresolved = focusDao.getUnresolvedSessions()
         if (unresolved.isNotEmpty()) {
@@ -263,7 +269,8 @@ class LifeAnalyticsRepository(
             category = category,
             plannedDate = plannedDate,
             plannedTime = null,
-            estimatedDurationMinutes = estimatedDurationMinutes
+            estimatedDurationMinutes = estimatedDurationMinutes,
+            lifeArea = lifeArea
         )
         val task = taskResult.getOrElse { return@withTransaction Result.failure(it) }
         startFocusSession(taskId = task.id, generalDescription = null)
@@ -522,7 +529,8 @@ class LifeAnalyticsRepository(
     suspend fun createHabit(
         name: String,
         weekdays: Set<DayOfWeek>,
-        effectiveFrom: LocalDate = timeProvider.todayLocalDate()
+        effectiveFrom: LocalDate = timeProvider.todayLocalDate(),
+        lifeArea: LifeArea? = null
     ): Result<Habit> = database.withTransaction {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
@@ -541,7 +549,8 @@ class LifeAnalyticsRepository(
             createdAtEpochMillis = now,
             updatedAtEpochMillis = now,
             deactivatedAtEpochMillis = null,
-            deactivatedFromLocalDate = null
+            deactivatedFromLocalDate = null,
+            lifeArea = lifeArea?.name
         )
         val scheduleType = HabitScheduleType.fromWeekdays(weekdays)
         val periodEntity = HabitSchedulePeriodEntity(
@@ -570,7 +579,8 @@ class LifeAnalyticsRepository(
         habitId: String,
         name: String,
         weekdays: Set<DayOfWeek>,
-        effectiveDate: LocalDate = timeProvider.todayLocalDate()
+        effectiveDate: LocalDate = timeProvider.todayLocalDate(),
+        lifeArea: LifeArea? = null
     ): Result<Habit> = database.withTransaction {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) {
@@ -589,7 +599,8 @@ class LifeAnalyticsRepository(
 
         val updatedHabit = existing.habit.copy(
             name = trimmed,
-            updatedAtEpochMillis = now
+            updatedAtEpochMillis = now,
+            lifeArea = lifeArea?.name ?: existing.habit.lifeArea
         )
         habitDao.updateHabit(updatedHabit)
 
@@ -853,7 +864,8 @@ class LifeAnalyticsRepository(
             completedAtEpochMillis = completedAtEpochMillis,
             sortOrder = sortOrder,
             createdAtEpochMillis = createdAtEpochMillis,
-            updatedAtEpochMillis = updatedAtEpochMillis
+            updatedAtEpochMillis = updatedAtEpochMillis,
+            lifeArea = LifeArea.fromNameOrNull(lifeArea)
         )
     }
 
@@ -913,7 +925,8 @@ class LifeAnalyticsRepository(
             updatedAtEpochMillis = habit.updatedAtEpochMillis,
             deactivatedAtEpochMillis = habit.deactivatedAtEpochMillis,
             deactivatedFromLocalDate = habit.deactivatedFromLocalDate?.let { DateAttributionPolicy.parseIsoDate(it) },
-            schedulePeriods = schedules.sortedBy { it.effectiveFrom }.map { it.toDomain() }
+            schedulePeriods = schedules.sortedBy { it.effectiveFrom }.map { it.toDomain() },
+            lifeArea = LifeArea.fromNameOrNull(habit.lifeArea)
         )
     }
 

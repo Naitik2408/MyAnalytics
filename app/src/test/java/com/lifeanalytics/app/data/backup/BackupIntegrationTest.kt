@@ -239,4 +239,26 @@ class BackupIntegrationTest {
         assertTrue(validResult.isSuccess)
         assertEquals("atLeast8Chars", validResult.getOrThrow())
     }
+
+    @Test
+    fun testLifeAreaAndMonthlyBudgetBackupRoundtrip() {
+        val basePayload = createTestPayload()
+        val classifiedTask = sampleTask.copy(lifeArea = "CAREER_PRODUCTIVITY")
+        val classifiedHabit = sampleHabit.copy(lifeArea = "HEALTH_LIFESTYLE")
+        val prefsWithBudget = samplePreferences.copy(monthlyBudgetMinor = 5_000_000L)
+
+        val payload = basePayload.copy(
+            manifest = basePayload.manifest.copy(preferences = prefsWithBudget),
+            tasks = listOf(classifiedTask),
+            habits = listOf(classifiedHabit)
+        )
+
+        val json = BackupSerializer.encodePayloadToJson(payload)
+        val decoded = BackupSerializer.decodeAndValidatePayload(json).getOrThrow()
+
+        assertEquals("CAREER_PRODUCTIVITY", decoded.tasks.first().lifeArea)
+        assertEquals("HEALTH_LIFESTYLE", decoded.habits.first().lifeArea)
+        assertEquals(5_000_000L, decoded.manifest.preferences.monthlyBudgetMinor)
+    }
 }
+

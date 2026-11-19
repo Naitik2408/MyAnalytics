@@ -880,3 +880,412 @@ fun LaGoalGauge(
         )
     }
 }
+
+// -----------------------------------------------------------------------------
+// 19 November 2026 Update: Performance-Over-Time Line Chart
+// -----------------------------------------------------------------------------
+
+@Composable
+fun LaPerformanceLineChart(
+    points: List<com.lifeanalytics.app.domain.analytics.PerformanceTrendPoint>,
+    selectedIndex: Int,
+    onSelectIndex: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    tint: TintSteps = LaTheme.colors.tints.lavender,
+    chartHeight: Dp = 152.dp,
+    emptyMessage: String = "Classify habits or tasks into a Life Area to see your performance trend over time.",
+    accessibilitySummary: String
+) {
+    val colors = LaTheme.colors
+    val hasAnyScore = points.any { it.overallScore != null }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = accessibilitySummary }
+    ) {
+        if (!hasAnyScore) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(chartHeight)
+                    .clip(LaTheme.radii.shapeMd)
+                    .background(tint.soft.copy(alpha = 0.55f))
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = emptyMessage,
+                    style = LaTheme.typography.label,
+                    color = colors.textSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+            return@Column
+        }
+
+        val safeSelectedIdx = selectedIndex.coerceIn(0, (points.size - 1).coerceAtLeast(0))
+        val selectedPoint = points.getOrNull(safeSelectedIdx)
+
+        // Selected point readout pill
+        if (selectedPoint != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = selectedPoint.label,
+                    style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+                val badgeText = selectedPoint.overallScore?.let { "Overall: $it%" } ?: "No scored data"
+                Box(
+                    modifier = Modifier
+                        .clip(LaTheme.radii.shapeFull)
+                        .background(if (selectedPoint.overallScore != null) colors.ink else colors.surfaceVariant)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = badgeText,
+                        style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.Bold),
+                        color = if (selectedPoint.overallScore != null) colors.onInk else colors.textSecondary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(chartHeight)
+                .pointerInput(points.size) {
+                    if (points.isNotEmpty()) {
+                        detectTapGestures { tapOffset ->
+                            val slotW = size.width / points.size.coerceAtLeast(1)
+                            val idx = (tapOffset.x / slotW).toInt().coerceIn(0, points.lastIndex)
+                            onSelectIndex(idx)
+                        }
+                    }
+                }
+        ) {
+            val count = points.size.coerceAtLeast(1)
+            val slotW = size.width / count
+            val topPad = 14.dp.toPx()
+            val bottomPad = 14.dp.toPx()
+            val usableH = (size.height - topPad - bottomPad).coerceAtLeast(10f)
+
+            // Horizontal reference lines (0%, 50%, 100%)
+            listOf(0f, 0.5f, 1f).forEach { frac ->
+                val y = topPad + usableH * (1f - frac)
+                drawLine(
+                    color = colors.outline.copy(alpha = 0.45f),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+
+            // Compute coordinates for points that have a valid score
+            val scoredCoords = mutableListOf<Pair<Int, Offset>>()
+            points.forEachIndexed { idx, pt ->
+                val x = idx * slotW + slotW / 2f
+                val score = pt.overallScore
+                if (score != null) {
+                    val norm = (score.coerceIn(0, 100)) / 100f
+                    val y = topPad + usableH * (1f - norm)
+                    scoredCoords.add(idx to Offset(x, y))
+                } else {
+                    // Draw a subtle missing-data marker on the baseline
+                    val baseY = topPad + usableH
+                    drawCircle(
+                        color = colors.outline,
+                        radius = 3.5.dp.toPx(),
+                        center = Offset(x, baseY),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
+            }
+
+            // Fill area and connecting line between consecutive scored points
+            if (scoredCoords.size >= 2) {
+                val fillPath = Path().apply {
+                    val first = scoredCoords.first().second
+                    val last = scoredCoords.last().second
+                    moveTo(first.x, topPad + usableH)
+                    scoredCoords.forEach { (_, pt) -> lineTo(pt.x, pt.y) }
+                    lineTo(last.x, topPad + usableH)
+                    close()
+                }
+                drawPath(
+                    path = fillPath,
+                    color = tint.base.copy(alpha = 0.35f)
+                )
+
+                val linePath = Path().apply {
+                    scoredCoords.forEachIndexed { i, (_, pt) ->
+                        if (i == 0) moveTo(pt.x, pt.y) else lineTo(pt.x, pt.y)
+                    }
+                }
+                drawPath(
+                    path = linePath,
+                    color = colors.ink,
+                    style = Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+
+            // Draw nodes
+            scoredCoords.forEach { (idx, center) ->
+                val isSel = idx == safeSelectedIdx
+                drawCircle(
+                    color = colors.surface,
+                    radius = if (isSel) 7.5.dp.toPx() else 5.5.dp.toPx(),
+                    center = center
+                )
+                drawCircle(
+                    color = if (isSel) colors.ink else tint.strong,
+                    radius = if (isSel) 5.5.dp.toPx() else 3.8.dp.toPx(),
+                    center = center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // X-axis bucket labels
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            points.forEachIndexed { idx, pt ->
+                val isSel = idx == safeSelectedIdx
+                Text(
+                    text = pt.label,
+                    style = LaTheme.typography.chartMicroLabel.copy(
+                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (isSel) colors.textPrimary else colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier
+                        .weight(1f)
+                        .pressScaleClickable { onSelectIndex(idx) }
+                )
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 19 November 2026 Update: 365-Day (366 in Leap Years) Year View Calendar
+// -----------------------------------------------------------------------------
+
+/**
+ * Interactive 365/366-Day Year View (`docs/04_HOME_DASHBOARD.md` & `docs/09_LIFE_ANALYTICS.md`):
+ * - One dot/cell per calendar day of the year (20 columns × ~19 rows).
+ * - Visually distinguishes 3 distinct states:
+ *   1. `ELAPSED_SCORED`: Filled rounded cell with lavender-to-ink color intensity (levels 1..4).
+ *   2. `ELAPSED_NO_DATA`: Distinct missing-data style (visible neutral ring outline with center dot),
+ *      NEVER using the lowest-performance color (`tint.soft`).
+ *   3. `FUTURE`: Subtle unfilled/ghost dot (`outline` at 24% opacity) for remaining days in the year.
+ * - Tapping any day cell invokes [onSelectDay] with the tapped [com.lifeanalytics.app.domain.analytics.YearDayCellModel].
+ */
+@Composable
+fun LaYear365Calendar(
+    calendar: com.lifeanalytics.app.domain.analytics.YearCalendarModel,
+    selectedDate: java.time.LocalDate?,
+    onSelectDay: (com.lifeanalytics.app.domain.analytics.YearDayCellModel) -> Unit,
+    modifier: Modifier = Modifier,
+    tint: TintSteps = LaTheme.colors.tints.lavender
+) {
+    val colors = LaTheme.colors
+    val columns = 20
+    val rows = (calendar.days.size + columns - 1) / columns
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = "${calendar.year} year view: ${calendar.elapsedDaysCount} of ${calendar.totalDaysInYear} days elapsed, ${calendar.scoredDaysCount} days with recorded performance scores."
+            },
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Summary strip: Elapsed vs Remaining + Scored days
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${calendar.elapsedDaysCount} / ${calendar.totalDaysInYear} days elapsed",
+                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
+            )
+            Text(
+                text = "${calendar.scoredDaysCount} scored day(s)",
+                style = LaTheme.typography.chartMicroLabel,
+                color = colors.textSecondary
+            )
+        }
+
+        // Interactive Canvas Grid for 365/366 days
+        val cellHeightDp = 15.dp
+        val gridHeight = cellHeightDp * rows
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(gridHeight)
+                .pointerInput(calendar.year, calendar.days.size) {
+                    detectTapGestures { tapOffset ->
+                        val colW = size.width / columns
+                        val rowH = size.height / rows
+                        val col = (tapOffset.x / colW).toInt().coerceIn(0, columns - 1)
+                        val row = (tapOffset.y / rowH).toInt().coerceIn(0, rows - 1)
+                        val idx = row * columns + col
+                        if (idx in calendar.days.indices) {
+                            onSelectDay(calendar.days[idx])
+                        }
+                    }
+                }
+        ) {
+            val colW = size.width / columns
+            val rowH = size.height / rows
+            val cellSize = min(colW, rowH) * 0.76f
+            val cornerPx = cellSize * 0.34f
+
+            calendar.days.forEachIndexed { idx, dayCell ->
+                val row = idx / columns
+                val col = idx % columns
+                val cx = col * colW + colW / 2f
+                val cy = row * rowH + rowH / 2f
+                val topLeft = Offset(cx - cellSize / 2f, cy - cellSize / 2f)
+                val isSelected = selectedDate == dayCell.date
+
+                when (dayCell.state) {
+                    com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_SCORED -> {
+                        val fillCol = when (dayCell.intensityLevel) {
+                            1 -> tint.soft
+                            2 -> tint.base
+                            3 -> tint.strong
+                            else -> colors.ink
+                        }
+                        drawRoundRect(
+                            color = fillCol,
+                            topLeft = topLeft,
+                            size = Size(cellSize, cellSize),
+                            cornerRadius = CornerRadius(cornerPx, cornerPx)
+                        )
+                    }
+
+                    com.lifeanalytics.app.domain.analytics.YearCalendarDayState.ELAPSED_NO_DATA -> {
+                        // Distinct missing-data style for elapsed days: outlined square + micro center dot (never tint.soft)
+                        drawRoundRect(
+                            color = colors.textSecondary.copy(alpha = 0.48f),
+                            topLeft = topLeft,
+                            size = Size(cellSize, cellSize),
+                            cornerRadius = CornerRadius(cornerPx, cornerPx),
+                            style = Stroke(width = 1.25.dp.toPx())
+                        )
+                        drawCircle(
+                            color = colors.textSecondary.copy(alpha = 0.45f),
+                            radius = cellSize * 0.14f,
+                            center = Offset(cx, cy)
+                        )
+                    }
+
+                    com.lifeanalytics.app.domain.analytics.YearCalendarDayState.FUTURE -> {
+                        // Future days remain neutral/unfilled subtle ghost dots
+                        drawCircle(
+                            color = colors.outline.copy(alpha = 0.42f),
+                            radius = cellSize * 0.22f,
+                            center = Offset(cx, cy)
+                        )
+                    }
+                }
+
+                if (isSelected) {
+                    drawRoundRect(
+                        color = colors.ink,
+                        topLeft = Offset(topLeft.x - 1.5.dp.toPx(), topLeft.y - 1.5.dp.toPx()),
+                        size = Size(cellSize + 3.dp.toPx(), cellSize + 3.dp.toPx()),
+                        cornerRadius = CornerRadius(cornerPx + 1.5.dp.toPx(), cornerPx + 1.5.dp.toPx()),
+                        style = Stroke(width = 1.8.dp.toPx())
+                    )
+                }
+            }
+        }
+
+        // Legend distinguishing: Elapsed (no data), Scored intensity (Low..High), and Future
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Elapsed no-data legend item
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Canvas(modifier = Modifier.size(11.dp)) {
+                        drawRoundRect(
+                            color = colors.textSecondary.copy(alpha = 0.55f),
+                            size = size,
+                            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx()),
+                            style = Stroke(width = 1.2.dp.toPx())
+                        )
+                        drawCircle(
+                            color = colors.textSecondary.copy(alpha = 0.55f),
+                            radius = size.minDimension * 0.16f
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "No score",
+                        style = LaTheme.typography.chartMicroLabel,
+                        color = colors.textSecondary
+                    )
+                }
+
+                // Future legend item
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Canvas(modifier = Modifier.size(11.dp)) {
+                        drawCircle(
+                            color = colors.outline.copy(alpha = 0.55f),
+                            radius = size.minDimension * 0.26f
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Future",
+                        style = LaTheme.typography.chartMicroLabel,
+                        color = colors.textSecondary
+                    )
+                }
+            }
+
+            // Scored intensity scale
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Score",
+                    style = LaTheme.typography.chartMicroLabel,
+                    color = colors.textSecondary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                listOf(tint.soft, tint.base, tint.strong, colors.ink).forEach { col ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 1.5.dp)
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(col)
+                    )
+                }
+            }
+        }
+    }
+}
+

@@ -39,7 +39,9 @@ data class TaskEntity(
     @ColumnInfo(name = "created_at_epoch_millis")
     val createdAtEpochMillis: Long,
     @ColumnInfo(name = "updated_at_epoch_millis")
-    val updatedAtEpochMillis: Long
+    val updatedAtEpochMillis: Long,
+    @ColumnInfo(name = "life_area")
+    val lifeArea: String? = null
 )
 
 @Entity(
@@ -150,7 +152,9 @@ data class HabitEntity(
     @ColumnInfo(name = "deactivated_at_epoch_millis")
     val deactivatedAtEpochMillis: Long?,
     @ColumnInfo(name = "deactivated_from_local_date")
-    val deactivatedFromLocalDate: String? // YYYY-MM-DD exclusive end date
+    val deactivatedFromLocalDate: String?, // YYYY-MM-DD exclusive end date
+    @ColumnInfo(name = "life_area")
+    val lifeArea: String? = null
 )
 
 @Entity(

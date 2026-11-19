@@ -104,6 +104,7 @@ object BackupSerializer {
                 JSONObject().apply {
                     put("themeOption", payload.manifest.preferences.themeOption.name)
                     put("currencyCode", payload.manifest.preferences.currencyCode)
+                    putOptNullableLong("monthlyBudgetMinor", payload.manifest.preferences.monthlyBudgetMinor)
                 }
             )
         }
@@ -123,6 +124,7 @@ object BackupSerializer {
                         put("sortOrder", t.sortOrder)
                         put("createdAtEpochMillis", t.createdAtEpochMillis)
                         put("updatedAtEpochMillis", t.updatedAtEpochMillis)
+                        putOptNullable("lifeArea", t.lifeArea)
                     }
                 )
             }
@@ -176,6 +178,7 @@ object BackupSerializer {
                         put("updatedAtEpochMillis", h.updatedAtEpochMillis)
                         putOptNullableLong("deactivatedAtEpochMillis", h.deactivatedAtEpochMillis)
                         putOptNullable("deactivatedFromLocalDate", h.deactivatedFromLocalDate)
+                        putOptNullable("lifeArea", h.lifeArea)
                     }
                 )
             }
@@ -267,6 +270,7 @@ object BackupSerializer {
         val themeRaw = prefsObj?.optString("themeOption")
         val theme = AppThemeOption.entries.firstOrNull { it.name == themeRaw } ?: AppThemeOption.LIGHT
         val currency = SupportedCurrency.fromCode(prefsObj?.optString("currencyCode")).code
+        val monthlyBudget = prefsObj?.optNullableLong("monthlyBudgetMinor")?.takeIf { it > 0L }
 
         val manifest = BackupManifest(
             backupId = manifestObj.getString("backupId"),
@@ -276,7 +280,11 @@ object BackupSerializer {
             createdAtEpochMillis = manifestObj.getLong("createdAtEpochMillis"),
             deviceLabel = manifestObj.optString("deviceLabel", "Android Device"),
             recordCounts = decodeRecordCounts(manifestObj.getJSONObject("recordCounts")),
-            preferences = AppPreferences(themeOption = theme, currencyCode = currency)
+            preferences = AppPreferences(
+                themeOption = theme,
+                currencyCode = currency,
+                monthlyBudgetMinor = monthlyBudget
+            )
         )
 
         val tasksArr = root.getJSONArray("tasks")
@@ -293,7 +301,8 @@ object BackupSerializer {
                 completedAtEpochMillis = o.optNullableLong("completedAtEpochMillis"),
                 sortOrder = o.optInt("sortOrder", 0),
                 createdAtEpochMillis = o.getLong("createdAtEpochMillis"),
-                updatedAtEpochMillis = o.getLong("updatedAtEpochMillis")
+                updatedAtEpochMillis = o.getLong("updatedAtEpochMillis"),
+                lifeArea = o.optNullableString("lifeArea")
             )
         }
 
@@ -340,7 +349,8 @@ object BackupSerializer {
                 createdAtEpochMillis = o.getLong("createdAtEpochMillis"),
                 updatedAtEpochMillis = o.getLong("updatedAtEpochMillis"),
                 deactivatedAtEpochMillis = o.optNullableLong("deactivatedAtEpochMillis"),
-                deactivatedFromLocalDate = o.optNullableString("deactivatedFromLocalDate")
+                deactivatedFromLocalDate = o.optNullableString("deactivatedFromLocalDate"),
+                lifeArea = o.optNullableString("lifeArea")
             )
         }
 

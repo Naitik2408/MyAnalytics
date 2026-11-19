@@ -113,6 +113,8 @@ private enum class TransactionFilter(val label: String) {
 fun FinanceScreen(
     repository: LifeAnalyticsRepository,
     currencyCode: String,
+    monthlyBudgetMinor: Long? = null,
+    onUpdateMonthlyBudget: suspend (Long?) -> Unit = {},
     initialDayFilter: LocalDate? = null
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
@@ -219,6 +221,7 @@ fun FinanceScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showBudgetDialog by remember { mutableStateOf(false) }
     var transactionToEdit by remember { mutableStateOf<FinanceTransaction?>(null) }
     var transactionToDelete by remember { mutableStateOf<FinanceTransaction?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -316,16 +319,45 @@ fun FinanceScreen(
                 }
             }
 
-            // 2. Tinted Blue Hero Panel for Net Amount + Paired Income & Expense Bento Tiles (v1.3 Rule 7: ₹0 net, never $0)
+            // 2. Tinted Blue Hero Panel for Net Amount + Paired Income & Expense Bento Tiles + Savings Rate & Budget Adherence (19 Nov 2026 spec)
             item {
                 val netSignText = when {
                     summary.netForPeriodMinor > 0L -> "Positive net inflow"
                     summary.netForPeriodMinor < 0L -> "Net outflow"
                     else -> "Balanced (${MoneyUtils.formatMinorUnits(0L, currencyCode)} net)"
                 }
+                val savingsRateText = summary.savingsRatePercent?.let { "$it%" } ?: "No income"
+                val savingsSupporting = if (summary.totalIncomeMinor > 0L) {
+                    "Savings: ${MoneyUtils.formatSignedNetMinorUnits(summary.savingsAmountMinor, currencyCode)}"
+                } else {
+                    "Record income to compute rate"
+                }
+
+                val activeBudget = monthlyBudgetMinor?.takeIf { it > 0L }
+                val periodBudgetMinor = if (activeBudget != null) {
+                    if (periodScope == FinancePeriodScope.MONTH) {
+                        activeBudget
+                    } else {
+                        (activeBudget / selectedYearMonth.lengthOfMonth().coerceAtLeast(28)).coerceAtLeast(1L)
+                    }
+                } else null
+
+                val budgetValueText = if (periodBudgetMinor != null) {
+                    val usedPct = ((summary.totalExpenseMinor * 100.0) / periodBudgetMinor).toInt()
+                    "$usedPct% used"
+                } else {
+                    "Set target"
+                }
+                val budgetSupporting = if (periodBudgetMinor != null) {
+                    val label = if (periodScope == FinancePeriodScope.MONTH) "Monthly budget" else "Daily budget share"
+                    "$label: ${MoneyUtils.formatMinorUnits(periodBudgetMinor, currencyCode)} • Tap to edit"
+                } else {
+                    "Tap to set monthly expense budget"
+                }
+
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
                     LaHeroPanel(
-                        title = "Net for this period",
+                        title = "Net cash flow for period",
                         subtitle = "$netSignText • Income minus expenses (not account balance)",
                         icon = Icons.Outlined.AccountBalanceWallet,
                         containerColor = colors.tints.blue.strong
@@ -361,6 +393,33 @@ fun FinanceScreen(
                             valueColor = colors.expense,
                             isEmptyValue = summary.totalExpenseMinor == 0L,
                             minHeight = 140.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
+                    ) {
+                        LaStatTile(
+                            label = "Savings Rate",
+                            value = savingsRateText,
+                            icon = Icons.Outlined.AccountBalanceWallet,
+                            supportingText = savingsSupporting,
+                            containerColor = colors.tints.lavender.base,
+                            isEmptyValue = summary.savingsRatePercent == null,
+                            minHeight = 136.dp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        LaStatTile(
+                            label = "Budget Target",
+                            value = budgetValueText,
+                            icon = Icons.Outlined.Edit,
+                            supportingText = budgetSupporting,
+                            containerColor = colors.tints.butter.base,
+                            isEmptyValue = periodBudgetMinor == null,
+                            minHeight = 136.dp,
+                            onClick = { showBudgetDialog = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -568,6 +627,126 @@ fun FinanceScreen(
             },
             onDismiss = { transactionToDelete = null }
         )
+    }
+
+    if (showBudgetDialog) {
+        MonthlyBudgetFormDialog(
+            currentBudgetMinor = monthlyBudgetMinor,
+            currencyCode = currencyCode,
+            onDismiss = { showBudgetDialog = false },
+            onSaveBudget = { newBudgetMinor ->
+                scope.launch {
+                    onUpdateMonthlyBudget(newBudgetMinor)
+                    showBudgetDialog = false
+                    snackbarHostState.showSnackbar(
+                        if (newBudgetMinor != null) "Monthly budget target updated" else "Monthly budget cleared"
+                    )
+                }
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MonthlyBudgetFormDialog(
+    currentBudgetMinor: Long?,
+    currencyCode: String,
+    onDismiss: () -> Unit,
+    onSaveBudget: (Long?) -> Unit
+) {
+    val colors = LaTheme.colors
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var inputText by rememberSaveable {
+        mutableStateOf(
+            currentBudgetMinor?.takeIf { it > 0L }?.let { MoneyUtils.minorUnitsToEditableString(it) } ?: ""
+        )
+    }
+    var validationError by remember { mutableStateOf<String?>(null) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = LaTheme.radii.shapeXlTop,
+        containerColor = colors.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = LaTheme.spacing.screenInset, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Monthly Expense Budget",
+                style = LaTheme.typography.screenTitle,
+                color = colors.textPrimary
+            )
+            Text(
+                text = "Set a monthly expense target ($currencyCode) to evaluate budget adherence and enable the Finance & Wealth category score. Leave blank or clear to track finances without a numeric score.",
+                style = LaTheme.typography.body,
+                color = colors.textSecondary
+            )
+
+            LaTextField(
+                value = inputText,
+                onValueChange = {
+                    inputText = it
+                    validationError = null
+                },
+                label = "Monthly expense budget ($currencyCode)",
+                placeholder = "e.g. 25000",
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true
+            )
+
+            if (validationError != null) {
+                Text(
+                    text = validationError!!,
+                    style = LaTheme.typography.label,
+                    color = colors.error
+                )
+            }
+
+            if (currentBudgetMinor != null && currentBudgetMinor > 0L) {
+                LaTextButton(
+                    text = "Clear monthly budget target",
+                    color = colors.error,
+                    onClick = { onSaveBudget(null) }
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                LaSecondaryButton(
+                    text = "Cancel",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f)
+                )
+                LaPrimaryButton(
+                    text = "Save budget",
+                    onClick = {
+                        val trimmed = inputText.trim()
+                        if (trimmed.isEmpty()) {
+                            onSaveBudget(null)
+                            return@LaPrimaryButton
+                        }
+                        val parsed = MoneyUtils.parseToMinorUnitsOrNull(trimmed)
+                        if (parsed == null || parsed <= 0L) {
+                            validationError = "Enter a valid positive budget amount."
+                            return@LaPrimaryButton
+                        }
+                        onSaveBudget(parsed)
+                    },
+                    modifier = Modifier.weight(1.2f)
+                )
+            }
+        }
     }
 }
 

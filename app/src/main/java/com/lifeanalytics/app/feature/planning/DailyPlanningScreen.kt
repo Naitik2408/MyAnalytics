@@ -345,14 +345,15 @@ fun DailyPlanningScreen(
             initialTask = editingTask,
             defaultDate = selectedDate,
             onDismiss = { showTaskDialog = false },
-            onSave = { title, category, plannedDate, plannedTime, estimateMinutes ->
+            onSave = { title, category, plannedDate, plannedTime, estimateMinutes, lifeArea ->
                 val result = if (editingTask == null) {
                     repository.createTask(
                         title = title,
                         category = category,
                         plannedDate = plannedDate,
                         plannedTime = plannedTime,
-                        estimatedDurationMinutes = estimateMinutes
+                        estimatedDurationMinutes = estimateMinutes,
+                        lifeArea = lifeArea
                     )
                 } else {
                     repository.updateTask(
@@ -361,7 +362,8 @@ fun DailyPlanningScreen(
                         category = category,
                         plannedDate = plannedDate,
                         plannedTime = plannedTime,
-                        estimatedDurationMinutes = estimateMinutes
+                        estimatedDurationMinutes = estimateMinutes,
+                        lifeArea = lifeArea
                     )
                 }
                 result.map {
@@ -408,6 +410,7 @@ private fun TaskRowItem(
     val spacing = LaTheme.spacing
 
     val metadataParts = buildList {
+        task.lifeArea?.let { add(it.displayName) }
         add(task.category.displayName)
         task.plannedTime?.let { add(DateAttributionPolicy.formatDisplayTime(it)) }
         if (task.estimatedDurationMinutes != null) {
@@ -505,7 +508,8 @@ fun TaskFormDialog(
         category: TaskCategory,
         plannedDate: LocalDate,
         plannedTime: LocalTime?,
-        estimatedMinutes: Int?
+        estimatedMinutes: Int?,
+        lifeArea: com.lifeanalytics.app.domain.model.LifeArea
     ) -> Result<Unit>
 ) {
     val colors = LaTheme.colors
@@ -516,6 +520,9 @@ fun TaskFormDialog(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
+    var selectedLifeArea by rememberSaveable {
+        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialTask?.lifeArea)
+    }
     var category by rememberSaveable { mutableStateOf(initialTask?.category ?: TaskCategory.OTHER) }
     var plannedDateIso by rememberSaveable {
         mutableStateOf(DateAttributionPolicy.formatIsoDate(initialTask?.plannedDate ?: defaultDate))
@@ -561,6 +568,27 @@ fun TaskFormDialog(
                 placeholder = "e.g. Prepare project presentation",
                 singleLine = true
             )
+
+            Text(
+                text = "Life Area *",
+                style = typography.label,
+                color = colors.textSecondary
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                verticalArrangement = Arrangement.spacedBy(spacing.space2)
+            ) {
+                com.lifeanalytics.app.domain.model.LifeArea.entries.forEach { area ->
+                    LaFilterChip(
+                        label = area.displayName,
+                        selected = selectedLifeArea == area,
+                        onClick = {
+                            selectedLifeArea = area
+                            validationError = null
+                        }
+                    )
+                }
+            }
 
             Text(
                 text = "Category",
@@ -659,6 +687,12 @@ fun TaskFormDialog(
                             return@LaPrimaryButton
                         }
 
+                        val area = selectedLifeArea
+                        if (area == null) {
+                            validationError = "Select a Life Area (Health & Lifestyle, Career & Productivity, or Finance & Wealth)."
+                            return@LaPrimaryButton
+                        }
+
                         val parsedDate = try {
                             DateAttributionPolicy.parseIsoDate(plannedDateIso.trim())
                         } catch (_: Exception) {
@@ -690,7 +724,7 @@ fun TaskFormDialog(
 
                         isSaving = true
                         scope.launch {
-                            val res = onSave(title, category, parsedDate, parsedTime, parsedEstimate)
+                            val res = onSave(title, category, parsedDate, parsedTime, parsedEstimate, area)
                             isSaving = false
                             res.onFailure { validationError = it.message ?: "Could not save task." }
                         }

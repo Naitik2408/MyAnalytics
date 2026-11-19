@@ -38,12 +38,15 @@ import com.lifeanalytics.app.core.common.MoneyUtils
 import com.lifeanalytics.app.core.designsystem.LaCollapsedEmptyRow
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaDateRangePill
+import com.lifeanalytics.app.core.designsystem.LaDayDrilldownBottomSheet
 import com.lifeanalytics.app.core.designsystem.LaHeatDayCell
 import com.lifeanalytics.app.core.designsystem.LaHeroPanel
 import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
 import com.lifeanalytics.app.core.designsystem.LaIconChip
+import com.lifeanalytics.app.core.designsystem.LaLifeScoreOverviewPanel
 import com.lifeanalytics.app.core.designsystem.LaMicroProgressBar
 import com.lifeanalytics.app.core.designsystem.LaMiniHeatCalendar
+import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
 import com.lifeanalytics.app.core.designsystem.LaPeriodEmptyCard
 import com.lifeanalytics.app.core.designsystem.LaPillBarChart
 import com.lifeanalytics.app.core.designsystem.LaPillBarEntry
@@ -55,9 +58,12 @@ import com.lifeanalytics.app.core.designsystem.LaStatTile
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.LaVerdictChip
+import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.TintSteps
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
+import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
+import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
 import com.lifeanalytics.app.domain.growth.GrowthEngine
 import com.lifeanalytics.app.domain.growth.GrowthInputData
 import com.lifeanalytics.app.domain.growth.GrowthWindow
@@ -74,19 +80,23 @@ import java.util.Locale
 enum class InsightsPeriodType(val label: String) {
     DAILY("Daily"),
     WEEKLY("Weekly"),
-    MONTHLY("Monthly")
+    MONTHLY("Monthly"),
+    YEARLY("Yearly")
 }
 
 @Composable
 fun InsightsScreen(
     repository: LifeAnalyticsRepository,
-    currencyCode: String
+    currencyCode: String,
+    monthlyBudgetMinor: Long? = null
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var periodType by rememberSaveable { mutableStateOf(InsightsPeriodType.WEEKLY) }
     var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var selectedFocusBarIdx by rememberSaveable { mutableIntStateOf(0) }
     var selectedTaskBarIdx by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTrendIdx by rememberSaveable { mutableIntStateOf(0) }
+    var drilldownDateEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val anchorDate = LocalDate.ofEpochDay(anchorDateEpoch)
 
@@ -95,6 +105,7 @@ fun InsightsScreen(
             InsightsPeriodType.DAILY -> anchorDate to anchorDate
             InsightsPeriodType.WEEKLY -> DateAttributionPolicy.isoWeekRange(anchorDate)
             InsightsPeriodType.MONTHLY -> DateAttributionPolicy.monthRange(YearMonth.from(anchorDate))
+            InsightsPeriodType.YEARLY -> LocalDate.of(anchorDate.year, 1, 1) to LocalDate.of(anchorDate.year, 12, 31)
         }
     }
 
@@ -106,10 +117,20 @@ fun InsightsScreen(
                 val prevMonth = YearMonth.from(currentStart).minusMonths(1)
                 DateAttributionPolicy.monthRange(prevMonth)
             }
+            InsightsPeriodType.YEARLY -> {
+                val prevYear = currentStart.year - 1
+                LocalDate.of(prevYear, 1, 1) to LocalDate.of(prevYear, 12, 31)
+            }
         }
     }
 
-    // Observe current and previous ranges
+    // Observe all and range-filtered source records
+    val allTasks by repository.observeAllTasks().collectAsState(initial = emptyList())
+    val allSessions by repository.observeAllSessions().collectAsState(initial = emptyList())
+    val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
+    val allHabitCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
+    val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
+
     val currentTasks by remember(currentStart, currentEnd) {
         repository.observeTasksInRange(currentStart, currentEnd)
     }.collectAsState(initial = emptyList())
@@ -124,7 +145,6 @@ fun InsightsScreen(
         repository.observeSessionsInRange(previousStart, previousEnd)
     }.collectAsState(initial = emptyList())
 
-    val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
     val currentHabitCompletions by remember(currentStart, currentEnd) {
         repository.observeHabitCompletionsInRange(currentStart, currentEnd)
     }.collectAsState(initial = emptyList())
@@ -138,6 +158,58 @@ fun InsightsScreen(
     val previousTransactions by remember(previousStart, previousEnd) {
         repository.observeTransactionsInRange(previousStart, previousEnd)
     }.collectAsState(initial = emptyList())
+
+    val analyticsWindow = when (periodType) {
+        InsightsPeriodType.DAILY -> AnalyticsTimeWindow.DAILY
+        InsightsPeriodType.WEEKLY -> AnalyticsTimeWindow.WEEKLY
+        InsightsPeriodType.MONTHLY -> AnalyticsTimeWindow.MONTHLY
+        InsightsPeriodType.YEARLY -> AnalyticsTimeWindow.YEARLY
+    }
+
+    val lifePerformance = remember(
+        analyticsWindow, anchorDate, today, allHabits, allHabitCompletions, allTasks, allTransactions, monthlyBudgetMinor
+    ) {
+        LifeAnalyticsEngine.evaluatePeriodPerformance(
+            window = analyticsWindow,
+            anchorDate = anchorDate,
+            today = today,
+            habits = allHabits,
+            completions = allHabitCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor,
+            computeComparison = true
+        )
+    }
+
+    val trendSeries = remember(
+        analyticsWindow, anchorDate, today, allHabits, allHabitCompletions, allTasks, allTransactions, monthlyBudgetMinor
+    ) {
+        LifeAnalyticsEngine.buildPerformanceTrendSeries(
+            window = analyticsWindow,
+            anchorDate = anchorDate,
+            today = today,
+            habits = allHabits,
+            completions = allHabitCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor
+        )
+    }
+
+    val yearCalendarModel = remember(
+        anchorDate.year, today, allHabits, allHabitCompletions, allTasks, allTransactions, monthlyBudgetMinor
+    ) {
+        LifeAnalyticsEngine.buildYearCalendar(
+            year = anchorDate.year,
+            today = today,
+            habits = allHabits,
+            completions = allHabitCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor
+        )
+    }
 
     // Calculations
     val currentTaskSummary = remember(currentTasks) {
@@ -197,6 +269,7 @@ fun InsightsScreen(
         InsightsPeriodType.DAILY -> GrowthWindow.DAY
         InsightsPeriodType.WEEKLY -> GrowthWindow.WEEK
         InsightsPeriodType.MONTHLY -> GrowthWindow.MONTH
+        InsightsPeriodType.YEARLY -> GrowthWindow.YEAR
     }
 
     val growthDirection = remember(
@@ -207,7 +280,6 @@ fun InsightsScreen(
         currentTransactions, previousTransactions
     ) {
         val recordedDates = mutableSetOf<LocalDate>()
-        // Recorded days in period
         currentHabitCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
         previousHabitCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
         currentTasks.forEach { task ->
@@ -361,12 +433,12 @@ fun InsightsScreen(
         ),
         verticalArrangement = Arrangement.spacedBy(spacing.space4)
     ) {
-        // 1. Compact Header: Title + Segmented Control + Pill Date-Range Control ("Today" / "This week" / "This month")
+        // 1. Compact Header: Title + Segmented Control (Daily, Weekly, Monthly, Yearly) + Pill Date-Range Control
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 LaScreenHeader(
                     title = "Insights",
-                    subtitle = "Patterns from your recorded activity"
+                    subtitle = "Life scores, trends, and category breakdowns"
                 )
 
                 LaSegmentedControl(
@@ -376,6 +448,7 @@ fun InsightsScreen(
                         periodType = it
                         selectedFocusBarIdx = 0
                         selectedTaskBarIdx = 0
+                        selectedTrendIdx = 0
                     },
                     labelProvider = { it.label },
                     modifier = Modifier.fillMaxWidth()
@@ -386,16 +459,19 @@ fun InsightsScreen(
                     InsightsPeriodType.DAILY -> DateAttributionPolicy.formatDisplayDate(currentStart)
                     InsightsPeriodType.WEEKLY -> "${DateAttributionPolicy.formatShortDate(currentStart)} – ${DateAttributionPolicy.formatShortDate(currentEnd)}"
                     InsightsPeriodType.MONTHLY -> DateAttributionPolicy.formatMonthYear(YearMonth.from(currentStart))
+                    InsightsPeriodType.YEARLY -> "${currentStart.year}"
                 }
                 val currentBadgeLabel = when (periodType) {
                     InsightsPeriodType.DAILY -> if (isCurrentPeriod) "Today" else "Selected day"
                     InsightsPeriodType.WEEKLY -> if (isCurrentPeriod) "This week" else "Selected week"
                     InsightsPeriodType.MONTHLY -> if (isCurrentPeriod) "This month" else "Selected month"
+                    InsightsPeriodType.YEARLY -> if (isCurrentPeriod) "This year" else "Selected year"
                 }
                 val resetButtonLabel = when (periodType) {
                     InsightsPeriodType.DAILY -> "Today"
                     InsightsPeriodType.WEEKLY -> "This week"
                     InsightsPeriodType.MONTHLY -> "This month"
+                    InsightsPeriodType.YEARLY -> "This year"
                 }
 
                 LaDateRangePill(
@@ -406,6 +482,7 @@ fun InsightsScreen(
                             InsightsPeriodType.DAILY -> anchorDate.minusDays(1).toEpochDay()
                             InsightsPeriodType.WEEKLY -> anchorDate.minusWeeks(1).toEpochDay()
                             InsightsPeriodType.MONTHLY -> anchorDate.minusMonths(1).toEpochDay()
+                            InsightsPeriodType.YEARLY -> anchorDate.minusYears(1).toEpochDay()
                         }
                     },
                     onNext = {
@@ -413,12 +490,80 @@ fun InsightsScreen(
                             InsightsPeriodType.DAILY -> anchorDate.plusDays(1).toEpochDay()
                             InsightsPeriodType.WEEKLY -> anchorDate.plusWeeks(1).toEpochDay()
                             InsightsPeriodType.MONTHLY -> anchorDate.plusMonths(1).toEpochDay()
+                            InsightsPeriodType.YEARLY -> anchorDate.plusYears(1).toEpochDay()
                         }
                     },
                     onResetToCurrent = if (!isCurrentPeriod) {
                         { anchorDateEpoch = today.toEpochDay() }
                     } else null,
                     resetLabel = resetButtonLabel
+                )
+            }
+        }
+
+        // 1A. Overall Life Score & 3 Life Area Category Breakdowns (19 Nov 2026 spec)
+        item {
+            LaLifeScoreOverviewPanel(
+                performance = lifePerformance,
+                currencyCode = currencyCode,
+                selectedWindow = analyticsWindow,
+                onSelectWindow = { win ->
+                    periodType = when (win) {
+                        AnalyticsTimeWindow.DAILY -> InsightsPeriodType.DAILY
+                        AnalyticsTimeWindow.WEEKLY -> InsightsPeriodType.WEEKLY
+                        AnalyticsTimeWindow.MONTHLY -> InsightsPeriodType.MONTHLY
+                        AnalyticsTimeWindow.YEARLY -> InsightsPeriodType.YEARLY
+                    }
+                    selectedTrendIdx = 0
+                },
+                showWindowSelector = false
+            )
+        }
+
+        // 1B. Performance Over Time Line Chart (Daily, Weekly, Monthly, Yearly view)
+        item {
+            val safeTrendIdx = selectedTrendIdx.coerceIn(0, (trendSeries.size - 1).coerceAtLeast(0))
+            val selectedPt = trendSeries.getOrNull(safeTrendIdx)
+            val lineSub = if (selectedPt?.overallScore != null) {
+                "${selectedPt.label}: ${selectedPt.overallScore} / 100 (${selectedPt.availableCategoriesCount} of 3 life areas)"
+            } else {
+                "Overall score trend across ${periodType.label.lowercase(Locale.ENGLISH)} intervals"
+            }
+            LaContainerPanel(
+                title = "Performance over time",
+                subtitle = lineSub
+            ) {
+                LaPerformanceLineChart(
+                    points = trendSeries,
+                    selectedIndex = safeTrendIdx,
+                    onSelectIndex = { selectedTrendIdx = it },
+                    tint = colors.tints.lavender,
+                    accessibilitySummary = "Performance over time line chart for ${periodType.label} view."
+                )
+            }
+        }
+
+        // 1C. 365-Day Year View (366 in leap years)
+        item {
+            val yearSub = buildString {
+                append("${yearCalendarModel.scoredDaysCount} scored • ")
+                append("${yearCalendarModel.elapsedDaysWithoutScoreCount} without score • ")
+                append("${yearCalendarModel.futureDaysCount} future days")
+                yearCalendarModel.averageYearScore?.let { avg ->
+                    append(" • Avg $avg/100")
+                }
+            }
+            LaContainerPanel(
+                title = "${yearCalendarModel.year} Year in pixels (${yearCalendarModel.totalDaysInYear} days)",
+                subtitle = "$yearSub • Tap any day to inspect details"
+            ) {
+                LaYear365Calendar(
+                    calendar = yearCalendarModel,
+                    selectedDate = drilldownDateEpoch?.let { LocalDate.ofEpochDay(it) },
+                    onSelectDay = { cell ->
+                        drilldownDateEpoch = cell.date.toEpochDay()
+                    },
+                    tint = colors.tints.lavender
                 )
             }
         }
@@ -540,12 +685,18 @@ fun InsightsScreen(
                     )
                 }
 
+                val savingsSupport = if (currentFinanceSummary.savingsRatePercent != null) {
+                    "Savings rate: ${currentFinanceSummary.savingsRatePercent}% • Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}"
+                } else {
+                    "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}"
+                }
+
                 val netTile: @Composable (Modifier) -> Unit = { mod ->
                     LaStatTile(
-                        label = "Net for period",
+                        label = "Net cash flow",
                         value = MoneyUtils.formatSignedNetMinorUnits(currentFinanceSummary.netForPeriodMinor, currencyCode),
                         icon = Icons.Outlined.AccountBalanceWallet,
-                        supportingText = "Expenses: ${MoneyUtils.formatMinorUnits(currentFinanceSummary.totalExpenseMinor, currencyCode)}",
+                        supportingText = savingsSupport,
                         containerColor = colors.tints.blue.base,
                         valueColor = netColor,
                         isEmptyValue = !currentFinanceSummary.hasTransactions,
@@ -650,6 +801,29 @@ fun InsightsScreen(
             }
         }
     }
+
+    if (drilldownDateEpoch != null) {
+        val selectedDate = LocalDate.ofEpochDay(drilldownDateEpoch!!)
+        val drilldown = remember(
+            selectedDate, today, allHabits, allHabitCompletions, allTasks, allSessions, allTransactions, monthlyBudgetMinor
+        ) {
+            LifeAnalyticsEngine.buildDayDrilldown(
+                date = selectedDate,
+                today = today,
+                habits = allHabits,
+                completions = allHabitCompletions,
+                tasks = allTasks,
+                sessions = allSessions,
+                transactions = allTransactions,
+                monthlyBudgetMinor = monthlyBudgetMinor
+            )
+        }
+        LaDayDrilldownBottomSheet(
+            drilldown = drilldown,
+            currencyCode = currencyCode,
+            onDismiss = { drilldownDateEpoch = null }
+        )
+    }
 }
 
 @Composable
@@ -684,8 +858,9 @@ private fun HabitsInsightsContainer(
                     } else {
                         "No due days"
                     }
+                    val areaPrefix = item.habit.lifeArea?.shortName?.let { "[$it] " } ?: ""
                     LaHorizontalTrackBar(
-                        label = item.habit.name,
+                        label = "$areaPrefix${item.habit.name}",
                         valueText = valueText,
                         progress = ratio,
                         tint = butterTint,
@@ -719,10 +894,14 @@ private fun FinanceInsightsContainer(
         }
     }
 
+    val savingsSubtitle = if (financeSummary.savingsRatePercent != null) {
+        " • Savings rate: ${financeSummary.savingsRatePercent}% (${MoneyUtils.formatSignedNetMinorUnits(financeSummary.savingsAmountMinor, currencyCode)})"
+    } else ""
+
     LaContainerPanel(
         title = "Finance summary",
         subtitle = if (financeSummary.hasTransactions) {
-            "${financeSummary.transactionCount} transaction(s) in this period"
+            "${financeSummary.transactionCount} transaction(s) in this period$savingsSubtitle"
         } else {
             "Income, expenses, and category share"
         }
@@ -784,6 +963,14 @@ private fun buildDateBuckets(
             }
             buckets
         }
+        InsightsPeriodType.YEARLY -> {
+            (1..12).map { m ->
+                val ym = YearMonth.of(startDate.year, m)
+                val (mStart, mEnd) = DateAttributionPolicy.monthRange(ym)
+                val label = mStart.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
+                Triple(label, mStart, mEnd)
+            }
+        }
     }
 }
 
@@ -811,3 +998,4 @@ private fun formatDurationComparisonText(comparison: PeriodComparison): String {
     val pctText = comparison.percentChange?.let { "$sign$it%" } ?: ""
     return "$pctText vs $prevFormatted prev"
 }
+

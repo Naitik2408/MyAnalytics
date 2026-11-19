@@ -4,6 +4,19 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 
+enum class LifeArea(val displayName: String, val shortName: String) {
+    HEALTH_LIFESTYLE("Health & Lifestyle", "Health"),
+    CAREER_PRODUCTIVITY("Career & Productivity", "Career"),
+    FINANCE_WEALTH("Finance & Wealth", "Finance");
+
+    companion object {
+        fun fromNameOrNull(value: String?): LifeArea? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull { it.name.equals(value.trim(), ignoreCase = true) }
+        }
+    }
+}
+
 enum class TaskCategory(val displayName: String) {
     STUDY("Study"),
     WORK("Work"),
@@ -33,7 +46,8 @@ data class Task(
     val completedAtEpochMillis: Long?,
     val sortOrder: Int,
     val createdAtEpochMillis: Long,
-    val updatedAtEpochMillis: Long
+    val updatedAtEpochMillis: Long,
+    val lifeArea: LifeArea? = null
 ) {
     val isCompleted: Boolean get() = status == TaskStatus.COMPLETED
 }
@@ -137,7 +151,8 @@ data class Habit(
     val updatedAtEpochMillis: Long,
     val deactivatedAtEpochMillis: Long?,
     val deactivatedFromLocalDate: LocalDate?,
-    val schedulePeriods: List<HabitSchedulePeriod> = emptyList()
+    val schedulePeriods: List<HabitSchedulePeriod> = emptyList(),
+    val lifeArea: LifeArea? = null
 ) {
     fun effectiveScheduleOn(date: LocalDate): HabitSchedulePeriod? {
         val createdDate = java.time.Instant.ofEpochMilli(createdAtEpochMillis)
@@ -256,5 +271,6 @@ enum class AppThemeOption(val displayName: String) {
 
 data class AppPreferences(
     val themeOption: AppThemeOption = AppThemeOption.LIGHT,
-    val currencyCode: String = "INR"
+    val currencyCode: String = "INR",
+    val monthlyBudgetMinor: Long? = null
 )

@@ -369,12 +369,13 @@ fun DailyHabitsScreen(
             initialHabit = null,
             effectiveDate = today,
             onDismiss = { showAddHabitDialog = false },
-            onSave = { name, weekdays ->
+            onSave = { name, weekdays, lifeArea ->
                 scope.launch {
                     repository.createHabit(
                         name = name,
                         weekdays = weekdays,
-                        effectiveFrom = selectedDate.coerceAtMost(today)
+                        effectiveFrom = selectedDate.coerceAtMost(today),
+                        lifeArea = lifeArea
                     ).onSuccess {
                         showAddHabitDialog = false
                         snackbarHostState.showSnackbar("Habit saved")
@@ -394,13 +395,14 @@ fun DailyHabitsScreen(
             initialHabit = editing,
             effectiveDate = today,
             onDismiss = { habitToEdit = null },
-            onSave = { name, weekdays ->
+            onSave = { name, weekdays, lifeArea ->
                 scope.launch {
                     repository.updateHabit(
                         habitId = editing.id,
                         name = name,
                         weekdays = weekdays,
-                        effectiveDate = today
+                        effectiveDate = today,
+                        lifeArea = lifeArea
                     ).onSuccess {
                         habitToEdit = null
                         snackbarHostState.showSnackbar("Habit updated")
@@ -489,6 +491,19 @@ private fun HabitDateRow(
                 horizontalArrangement = Arrangement.spacedBy(spacing.space2),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                item.habit.lifeArea?.let { area ->
+                    Surface(
+                        shape = radii.shapeFull,
+                        color = tints.lavender.base
+                    ) {
+                        Text(
+                            text = area.shortName,
+                            style = typography.chartMicroLabel,
+                            color = colors.textPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
                 val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
                 Surface(
                     shape = radii.shapeFull,
@@ -544,12 +559,13 @@ private fun HabitNotScheduledRow(
                 color = colors.textPrimary
             )
             Spacer(modifier = Modifier.height(2.dp))
+            val areaPrefix = item.habit.lifeArea?.let { "${it.displayName} • " } ?: ""
             val scheduleLabel = formatScheduleLabel(item.schedulePeriod?.weekdays.orEmpty())
             val consistencyText = if (consistency != null && consistency.totalDueOccurrences > 0) {
                 " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences} (${consistency.consistencyPercent}%)"
             } else ""
             Text(
-                text = "Not scheduled today ($scheduleLabel)$consistencyText",
+                text = "${areaPrefix}Not scheduled today ($scheduleLabel)$consistencyText",
                 style = typography.label,
                 color = colors.textSecondary
             )
@@ -588,6 +604,7 @@ private fun InactiveHabitRow(
                 style = typography.body,
                 color = colors.textSecondary
             )
+            val areaPrefix = habit.lifeArea?.let { "${it.displayName} • " } ?: ""
             val deactivatedText = habit.deactivatedFromLocalDate?.let {
                 "Deactivated ${DateAttributionPolicy.formatShortDate(it)}"
             } ?: "Inactive"
@@ -595,7 +612,7 @@ private fun InactiveHabitRow(
                 " • 30d: ${consistency.completedDueOccurrences}/${consistency.totalDueOccurrences}"
             } else ""
             Text(
-                text = "$deactivatedText$consistencyText",
+                text = "$areaPrefix$deactivatedText$consistencyText",
                 style = typography.label,
                 color = colors.textSecondary
             )
@@ -616,7 +633,7 @@ fun HabitFormDialog(
     initialHabit: Habit?,
     effectiveDate: LocalDate,
     onDismiss: () -> Unit,
-    onSave: (name: String, weekdays: Set<DayOfWeek>) -> Unit,
+    onSave: (name: String, weekdays: Set<DayOfWeek>, lifeArea: com.lifeanalytics.app.domain.model.LifeArea) -> Unit,
     onDeactivate: (() -> Unit)?,
     onRequestDelete: (() -> Unit)?
 ) {
@@ -629,6 +646,9 @@ fun HabitFormDialog(
     val currentPeriod = initialHabit?.effectiveScheduleOn(effectiveDate)
         ?: initialHabit?.schedulePeriods?.lastOrNull()
     var name by rememberSaveable { mutableStateOf(initialHabit?.name ?: "") }
+    var selectedLifeArea by rememberSaveable {
+        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialHabit?.lifeArea)
+    }
     var selectedDays by remember {
         mutableStateOf(
             currentPeriod?.weekdays?.takeIf { it.isNotEmpty() } ?: DayOfWeek.entries.toSet()
@@ -675,9 +695,31 @@ fun HabitFormDialog(
                     validationError = null
                 },
                 label = "Habit name",
-                placeholder = "e.g., Read 20 pages, Exercise",
+                placeholder = "e.g., Read 20 pages, Exercise, English practice",
                 singleLine = true
             )
+
+            Text(
+                text = "Life Area *",
+                style = typography.label,
+                color = colors.textSecondary
+            )
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                verticalArrangement = Arrangement.spacedBy(spacing.space2)
+            ) {
+                com.lifeanalytics.app.domain.model.LifeArea.entries.forEach { area ->
+                    LaFilterChip(
+                        label = area.displayName,
+                        selected = selectedLifeArea == area,
+                        onClick = {
+                            selectedLifeArea = area
+                            validationError = null
+                        }
+                    )
+                }
+            }
 
             Text(
                 text = "Quick schedule",
@@ -798,11 +840,16 @@ fun HabitFormDialog(
                             validationError = "Enter a habit name to continue."
                             return@LaPrimaryButton
                         }
+                        val area = selectedLifeArea
+                        if (area == null) {
+                            validationError = "Select a Life Area (Health & Lifestyle, Career & Productivity, or Finance & Wealth)."
+                            return@LaPrimaryButton
+                        }
                         if (selectedDays.isEmpty()) {
                             validationError = "Select at least one scheduled weekday."
                             return@LaPrimaryButton
                         }
-                        onSave(trimmed, selectedDays)
+                        onSave(trimmed, selectedDays, area)
                     }
                 )
             }

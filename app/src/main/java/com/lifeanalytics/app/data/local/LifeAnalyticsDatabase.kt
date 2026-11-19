@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lifeanalytics.app.data.local.dao.DailyReviewDao
 import com.lifeanalytics.app.data.local.dao.FinanceDao
 import com.lifeanalytics.app.data.local.dao.FocusDao
@@ -29,7 +31,7 @@ import com.lifeanalytics.app.data.local.entity.TaskEntity
         FinanceTransactionEntity::class,
         DailyReviewEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class LifeAnalyticsDatabase : RoomDatabase() {
@@ -42,6 +44,18 @@ abstract class LifeAnalyticsDatabase : RoomDatabase() {
     companion object {
         private const val DATABASE_NAME = "life_analytics.db"
 
+        /**
+         * Additive migration from v1 to v2 (docs/11_DATA_ARCHITECTURE.md 19 Nov 2026 update):
+         * Adds nullable life_area classification columns to tasks and habits without altering
+         * or backfilling any existing legacy records.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN life_area TEXT")
+                db.execSQL("ALTER TABLE habits ADD COLUMN life_area TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: LifeAnalyticsDatabase? = null
 
@@ -52,6 +66,7 @@ abstract class LifeAnalyticsDatabase : RoomDatabase() {
                     LifeAnalyticsDatabase::class.java,
                     DATABASE_NAME
                 )
+                    .addMigrations(MIGRATION_1_2)
                     // Never use fallbackToDestructiveMigration in production (docs/11_DATA_ARCHITECTURE.md Section 16)
                     .build()
                     .also { INSTANCE = it }

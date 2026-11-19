@@ -71,9 +71,15 @@ import com.lifeanalytics.app.core.designsystem.LaStatTile
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.LaDirectionCard
+import com.lifeanalytics.app.core.designsystem.LaDayDrilldownBottomSheet
+import com.lifeanalytics.app.core.designsystem.LaLifeScoreOverviewPanel
+import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
+import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
+import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
+import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
 import com.lifeanalytics.app.domain.growth.GrowthEngine
 import com.lifeanalytics.app.domain.growth.GrowthInputData
 import com.lifeanalytics.app.domain.growth.GrowthWindow
@@ -94,6 +100,7 @@ import kotlinx.coroutines.launch
 fun HomeDashboardScreen(
     repository: LifeAnalyticsRepository,
     currencyCode: String,
+    monthlyBudgetMinor: Long? = null,
     onNavigateToPlanning: (LocalDate) -> Unit,
     onNavigateToFocus: (String?) -> Unit,
     onNavigateToHabits: (LocalDate) -> Unit,
@@ -145,108 +152,53 @@ fun HomeDashboardScreen(
         repository.observeReviewForDate(today)
     }.collectAsState(initial = null)
 
-    var growthWindow by rememberSaveable { mutableStateOf(GrowthWindow.WEEK) }
+    var analyticsWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.WEEKLY) }
+    var selectedTrendPointIdx by rememberSaveable { mutableIntStateOf(0) }
+    var drilldownDateEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    val growthDirectionResult = remember(
-        growthWindow, today, allTasks, allHabits, allCompletions, allSessions, allTransactions
+    val lifePerformance = remember(
+        analyticsWindow, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
     ) {
-        val bounds = GrowthEngine.calculatePeriodBounds(growthWindow, today)
-
-        // Recorded days set across all source facts
-        val recordedDates = mutableSetOf<LocalDate>()
-        allCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
-        allTasks.forEach { task ->
-            recordedDates.add(task.plannedDate)
-            task.completedAtEpochMillis?.let { ms ->
-                recordedDates.add(DateAttributionPolicy.localDateForEvent(ms, null))
-            }
-        }
-        allSessions.forEach { session ->
-            if (session.status == FocusSessionStatus.COMPLETED) {
-                recordedDates.add(session.startedLocalDate)
-            }
-        }
-        allTransactions.forEach { tx -> recordedDates.add(tx.transactionDate) }
-
-        // Habits evaluation
-        val currHabitsSummary = DomainCalculations.calculateHabitPeriodConsistency(
-            habits = allHabits,
-            completions = allCompletions,
-            startDate = bounds.currentStart,
-            endDate = bounds.currentEnd,
-            today = today.minusDays(1) // strictly completed days
-        )
-        val prevHabitsSummary = DomainCalculations.calculateHabitPeriodConsistency(
-            habits = allHabits,
-            completions = allCompletions,
-            startDate = bounds.previousStart,
-            endDate = bounds.previousEnd,
-            today = today
-        )
-
-        // Tasks evaluation (completed days only)
-        val currTasks = allTasks.filter { task ->
-            !task.plannedDate.isBefore(bounds.currentStart) && !task.plannedDate.isAfter(bounds.currentEnd)
-        }
-        val prevTasks = allTasks.filter { task ->
-            !task.plannedDate.isBefore(bounds.previousStart) && !task.plannedDate.isAfter(bounds.previousEnd)
-        }
-
-        // Focus sessions evaluation (completed days only)
-        val currSessions = allSessions.filter { session ->
-            session.status == FocusSessionStatus.COMPLETED &&
-                !session.startedLocalDate.isBefore(bounds.currentStart) &&
-                !session.startedLocalDate.isAfter(bounds.currentEnd)
-        }
-        val prevSessions = allSessions.filter { session ->
-            session.status == FocusSessionStatus.COMPLETED &&
-                !session.startedLocalDate.isBefore(bounds.previousStart) &&
-                !session.startedLocalDate.isAfter(bounds.previousEnd)
-        }
-
-        // Finance evaluation (includes today for open period)
-        val currFinanceTx = allTransactions.filter { tx ->
-            !tx.transactionDate.isBefore(bounds.currentStart) && !tx.transactionDate.isAfter(today)
-        }
-        val prevFinanceTx = allTransactions.filter { tx ->
-            !tx.transactionDate.isBefore(bounds.previousStart) && !tx.transactionDate.isAfter(bounds.previousEnd)
-        }
-        val currFinSummary = DomainCalculations.calculateFinancePeriodSummary(currFinanceTx)
-        val prevFinSummary = DomainCalculations.calculateFinancePeriodSummary(prevFinanceTx)
-
-        val prevFinanceRecordedDays = prevFinanceTx.map { it.transactionDate }.toSet().size
-
-        val isClosed = when (growthWindow) {
-            GrowthWindow.DAY -> true
-            GrowthWindow.WEEK -> false
-            GrowthWindow.MONTH -> today.dayOfMonth == 1 && today.minusDays(1).month == bounds.currentStart.month
-            GrowthWindow.YEAR -> today.dayOfYear == 1 && today.minusDays(1).year == bounds.currentStart.year
-        }
-
-        val input = GrowthInputData(
+        LifeAnalyticsEngine.evaluatePeriodPerformance(
+            window = analyticsWindow,
+            anchorDate = today,
             today = today,
-            window = growthWindow,
-            recordedDates = recordedDates,
-            currentHabitsCompleted = currHabitsSummary.completedDueOccurrences,
-            currentHabitsDue = currHabitsSummary.totalDueOccurrences,
-            previousHabitsCompleted = prevHabitsSummary.completedDueOccurrences,
-            previousHabitsDue = prevHabitsSummary.totalDueOccurrences,
-            currentTasksCompleted = currTasks.count { it.isCompleted },
-            currentTasksPlanned = currTasks.size,
-            previousTasksCompleted = prevTasks.count { it.isCompleted },
-            previousTasksPlanned = prevTasks.size,
-            currentFocusDurationSeconds = DomainCalculations.sumCompletedFocusDurationSeconds(currSessions),
-            previousFocusDurationSeconds = DomainCalculations.sumCompletedFocusDurationSeconds(prevSessions),
-            currentIncomeMinor = currFinSummary.totalIncomeMinor,
-            currentExpenseMinor = currFinSummary.totalExpenseMinor,
-            previousIncomeMinor = prevFinSummary.totalIncomeMinor,
-            previousExpenseMinor = prevFinSummary.totalExpenseMinor,
-            currentPeriodHasTransactions = currFinanceTx.isNotEmpty(),
-            previousPeriodRecordedDays = prevFinanceRecordedDays,
-            isCurrentPeriodClosed = isClosed
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor,
+            computeComparison = true
         )
+    }
 
-        GrowthEngine.evaluate(input)
+    val trendSeries = remember(
+        analyticsWindow, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
+    ) {
+        LifeAnalyticsEngine.buildPerformanceTrendSeries(
+            window = analyticsWindow,
+            anchorDate = today,
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor
+        )
+    }
+
+    val yearCalendarModel = remember(
+        today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
+    ) {
+        LifeAnalyticsEngine.buildYearCalendar(
+            year = today.year,
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks,
+            transactions = allTransactions,
+            monthlyBudgetMinor = monthlyBudgetMinor
+        )
     }
 
     val taskSummary = remember(todayTasks) {
@@ -553,15 +505,77 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 4A. Growth Direction Card (docs/14_GROWTH_ENGINE.md)
+            // 4A. Life Performance Overview Card (Overall Score + Health/Career/Finance breakdowns per 19 Nov 2026 spec)
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaDirectionCard(
-                        directionResult = growthDirectionResult,
-                        selectedWindow = growthWindow,
-                        onSelectWindow = { growthWindow = it },
+                    LaLifeScoreOverviewPanel(
+                        performance = lifePerformance,
+                        currencyCode = currencyCode,
+                        selectedWindow = analyticsWindow,
+                        onSelectWindow = {
+                            analyticsWindow = it
+                            selectedTrendPointIdx = 0
+                        },
+                        showWindowSelector = true,
                         onNavigateToInsights = onNavigateToInsights
                     )
+                }
+            }
+
+            // 4B. Performance Over Time Line Chart (Daily, Weekly, Monthly, Yearly view)
+            item {
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    val safeTrendIdx = selectedTrendPointIdx.coerceIn(
+                        0,
+                        (trendSeries.size - 1).coerceAtLeast(0)
+                    )
+                    val selectedPt = trendSeries.getOrNull(safeTrendIdx)
+                    val chartSubtitle = if (selectedPt?.overallScore != null) {
+                        "${selectedPt.label}: ${selectedPt.overallScore} / 100 (${selectedPt.availableCategoriesCount} of 3 areas)"
+                    } else {
+                        "Tap any point to inspect period score (${analyticsWindow.label} trend)"
+                    }
+                    LaContainerPanel(
+                        title = "Performance over time",
+                        subtitle = chartSubtitle,
+                        actionLabel = "Insights",
+                        onActionClick = onNavigateToInsights
+                    ) {
+                        LaPerformanceLineChart(
+                            points = trendSeries,
+                            selectedIndex = safeTrendIdx,
+                            onSelectIndex = { selectedTrendPointIdx = it },
+                            tint = colors.tints.lavender,
+                            accessibilitySummary = "Performance over time line chart for ${analyticsWindow.label} window."
+                        )
+                    }
+                }
+            }
+
+            // 4C. Interactive 365-Day Year View (1 dot per calendar day; elapsed vs missing vs future)
+            item {
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    val yearSub = buildString {
+                        append("${yearCalendarModel.scoredDaysCount} scored • ")
+                        append("${yearCalendarModel.elapsedDaysWithoutScoreCount} without score • ")
+                        append("${yearCalendarModel.futureDaysCount} future days")
+                        yearCalendarModel.averageYearScore?.let { avg ->
+                            append(" • Avg $avg/100")
+                        }
+                    }
+                    LaContainerPanel(
+                        title = "${yearCalendarModel.year} Year in pixels (${yearCalendarModel.totalDaysInYear} days)",
+                        subtitle = "$yearSub • Tap any day to inspect details"
+                    ) {
+                        LaYear365Calendar(
+                            calendar = yearCalendarModel,
+                            selectedDate = drilldownDateEpoch?.let { LocalDate.ofEpochDay(it) },
+                            onSelectDay = { cell ->
+                                drilldownDateEpoch = cell.date.toEpochDay()
+                            },
+                            tint = colors.tints.lavender
+                        )
+                    }
                 }
             }
 
@@ -824,12 +838,18 @@ fun HomeDashboardScreen(
                                         }
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = item.habit.name,
-                                        style = LaTheme.typography.body.copy(fontWeight = FontWeight.Medium),
-                                        color = colors.textPrimary,
-                                        modifier = Modifier.weight(1f)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.habit.name,
+                                            style = LaTheme.typography.body.copy(fontWeight = FontWeight.Medium),
+                                            color = colors.textPrimary
+                                        )
+                                        Text(
+                                            text = item.habit.lifeArea?.displayName ?: "Unclassified life area",
+                                            style = LaTheme.typography.chartMicroLabel,
+                                            color = colors.textSecondary
+                                        )
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .clip(LaTheme.radii.shapeFull)
@@ -914,18 +934,45 @@ fun HomeDashboardScreen(
         )
     }
 
+    if (drilldownDateEpoch != null) {
+        val selectedDate = LocalDate.ofEpochDay(drilldownDateEpoch!!)
+        val drilldown = remember(
+            selectedDate, today, allHabits, allCompletions, allTasks, allSessions, allTransactions, monthlyBudgetMinor
+        ) {
+            LifeAnalyticsEngine.buildDayDrilldown(
+                date = selectedDate,
+                today = today,
+                habits = allHabits,
+                completions = allCompletions,
+                tasks = allTasks,
+                sessions = allSessions,
+                transactions = allTransactions,
+                monthlyBudgetMinor = monthlyBudgetMinor
+            )
+        }
+        LaDayDrilldownBottomSheet(
+            drilldown = drilldown,
+            currencyCode = currencyCode,
+            onDismiss = { drilldownDateEpoch = null },
+            onOpenPlanningForDate = onNavigateToPlanning,
+            onOpenHabitsForDate = onNavigateToHabits,
+            onOpenFinanceForDate = onNavigateToFinanceDay
+        )
+    }
+
     if (showAddTaskDialog) {
         TaskFormDialog(
             initialTask = null,
             defaultDate = today,
             onDismiss = { showAddTaskDialog = false },
-            onSave = { title, category, plannedDate, plannedTime, estimateMinutes ->
+            onSave = { title, category, plannedDate, plannedTime, estimateMinutes, lifeArea ->
                 repository.createTask(
                     title = title,
                     category = category,
                     plannedDate = plannedDate,
                     plannedTime = plannedTime,
-                    estimatedDurationMinutes = estimateMinutes
+                    estimatedDurationMinutes = estimateMinutes,
+                    lifeArea = lifeArea
                 ).map {
                     showAddTaskDialog = false
                     scope.launch { snackbarHostState.showSnackbar("Task saved") }
@@ -1079,6 +1126,7 @@ private fun HomeTaskListRow(
                 overflow = TextOverflow.Ellipsis
             )
             val metaParts = buildList {
+                add(task.lifeArea?.shortName ?: "Unclassified")
                 add(task.category.displayName)
                 task.plannedTime?.let { add(DateAttributionPolicy.formatDisplayTime(it)) }
                 task.estimatedDurationMinutes?.let { add(DateAttributionPolicy.formatMinutes(it)) }
