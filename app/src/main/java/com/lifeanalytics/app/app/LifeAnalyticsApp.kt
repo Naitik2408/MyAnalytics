@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import com.lifeanalytics.app.core.designsystem.LaFloatingDock
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.backup.BackupManager
+import com.lifeanalytics.app.data.demo.SampleDataSeeder
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.data.repository.PreferencesRepository
 import com.lifeanalytics.app.domain.model.AppPreferences
@@ -69,6 +71,20 @@ fun LifeAnalyticsApp(
     var habitsDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var reviewDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var financeDayFilterEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    // Ensure the isolated October 1–31, 2026 sample dataset is automatically populated
+    // on initial launch so the Home Page immediately displays real calculated historical analytics
+    LaunchedEffect(Unit) {
+        if (!preferencesRepository.hasAutoSeededOct2026Demo()) {
+            if (!repository.hasDemoSampleData()) {
+                repository.seedDemoSampleMonth(preferences.currencyCode)
+                if (preferences.monthlyBudgetMinor == null || preferences.monthlyBudgetMinor == 0L) {
+                    preferencesRepository.setMonthlyBudgetMinor(SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR)
+                }
+            }
+            preferencesRepository.setAutoSeededOct2026Demo(true)
+        }
+    }
 
     val primaryRoutes = remember { PrimaryDestination.entries.map { it.route }.toSet() }
     val showBottomDock = currentRoute in primaryRoutes

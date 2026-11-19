@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -61,6 +62,7 @@ import com.lifeanalytics.app.core.designsystem.LaVerdictChip
 import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.TintSteps
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
+import com.lifeanalytics.app.data.demo.SampleDataSeeder
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
 import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
@@ -91,8 +93,9 @@ fun InsightsScreen(
     monthlyBudgetMinor: Long? = null
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
-    var periodType by rememberSaveable { mutableStateOf(InsightsPeriodType.WEEKLY) }
+    var periodType by rememberSaveable { mutableStateOf(InsightsPeriodType.MONTHLY) }
     var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    var userAdjustedAnchor by rememberSaveable { mutableStateOf(false) }
     var selectedFocusBarIdx by rememberSaveable { mutableIntStateOf(0) }
     var selectedTaskBarIdx by rememberSaveable { mutableIntStateOf(0) }
     var selectedTrendIdx by rememberSaveable { mutableIntStateOf(0) }
@@ -130,6 +133,27 @@ fun InsightsScreen(
     val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
     val allHabitCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
     val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
+
+    val currentMonthYm = remember(today) { YearMonth.from(today) }
+    val sampleMonthYm = remember(today) { SampleDataSeeder.targetSampleMonth(today) }
+
+    LaunchedEffect(allTasks.size, allHabitCompletions.size, allTransactions.size, userAdjustedAnchor) {
+        if (!userAdjustedAnchor && periodType == InsightsPeriodType.MONTHLY) {
+            val hasCurrentMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == currentMonthYm } ||
+                allHabitCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == currentMonthYm } ||
+                allTransactions.any { YearMonth.from(it.transactionDate) == currentMonthYm }
+
+            val hasSampleMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == sampleMonthYm } ||
+                allHabitCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == sampleMonthYm } ||
+                allTransactions.any { YearMonth.from(it.transactionDate) == sampleMonthYm }
+
+            if (!hasCurrentMonthActivity && hasSampleMonthActivity) {
+                anchorDateEpoch = sampleMonthYm.atEndOfMonth().toEpochDay()
+            } else if (hasCurrentMonthActivity) {
+                anchorDateEpoch = today.toEpochDay()
+            }
+        }
+    }
 
     val currentTasks by remember(currentStart, currentEnd) {
         repository.observeTasksInRange(currentStart, currentEnd)
@@ -476,6 +500,7 @@ fun InsightsScreen(
                     title = rangeTitle,
                     badgeText = currentBadgeLabel,
                     onPrevious = {
+                        userAdjustedAnchor = true
                         anchorDateEpoch = when (periodType) {
                             InsightsPeriodType.DAILY -> anchorDate.minusDays(1).toEpochDay()
                             InsightsPeriodType.WEEKLY -> anchorDate.minusWeeks(1).toEpochDay()
@@ -484,6 +509,7 @@ fun InsightsScreen(
                         }
                     },
                     onNext = {
+                        userAdjustedAnchor = true
                         anchorDateEpoch = when (periodType) {
                             InsightsPeriodType.DAILY -> anchorDate.plusDays(1).toEpochDay()
                             InsightsPeriodType.WEEKLY -> anchorDate.plusWeeks(1).toEpochDay()
@@ -492,7 +518,10 @@ fun InsightsScreen(
                         }
                     },
                     onResetToCurrent = if (!isCurrentPeriod) {
-                        { anchorDateEpoch = today.toEpochDay() }
+                        {
+                            userAdjustedAnchor = true
+                            anchorDateEpoch = today.toEpochDay()
+                        }
                     } else null,
                     resetLabel = resetButtonLabel
                 )

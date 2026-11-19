@@ -3,6 +3,7 @@ package com.lifeanalytics.app.data.repository
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -11,6 +12,7 @@ import com.lifeanalytics.app.core.common.SupportedCurrency
 import com.lifeanalytics.app.domain.model.AppPreferences
 import com.lifeanalytics.app.domain.model.AppThemeOption
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "life_analytics_prefs")
@@ -23,6 +25,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val THEME_OPTION = stringPreferencesKey("theme_option_v12")
         val CURRENCY_CODE = stringPreferencesKey("currency_code")
         val MONTHLY_BUDGET_MINOR = longPreferencesKey("monthly_budget_minor")
+        val DEMO_AUTO_SEEDED_OCT_2026 = booleanPreferencesKey("demo_auto_seeded_oct2026_v1")
     }
 
     val preferencesFlow: Flow<AppPreferences> = dataStore.data.map { prefs ->
@@ -35,6 +38,17 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             currencyCode = currency,
             monthlyBudgetMinor = budget
         )
+    }
+
+    suspend fun hasAutoSeededOct2026Demo(): Boolean {
+        val prefs = dataStore.data.first()
+        return prefs[Keys.DEMO_AUTO_SEEDED_OCT_2026] == true
+    }
+
+    suspend fun setAutoSeededOct2026Demo(seeded: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.DEMO_AUTO_SEEDED_OCT_2026] = seeded
+        }
     }
 
     suspend fun setThemeOption(option: AppThemeOption) {

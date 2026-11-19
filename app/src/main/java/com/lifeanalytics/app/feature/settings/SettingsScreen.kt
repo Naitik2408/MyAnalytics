@@ -621,6 +621,7 @@ fun SettingsScreen(
                                                 com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR
                                             )
                                         }
+                                        preferencesRepository.setAutoSeededOct2026Demo(true)
                                         demoStatusText = "Loaded ${summary.monthLabel}: ${summary.habitsSeeded} habits, ${summary.habitCompletionsSeeded} completions, ${summary.tasksSeeded} tasks, ${summary.transactionsSeeded} finance entries."
                                     }
                                     .onFailure { err ->
@@ -640,6 +641,7 @@ fun SettingsScreen(
                             scope.launch {
                                 repository.removeDemoSampleMonth()
                                     .onSuccess {
+                                        preferencesRepository.setAutoSeededOct2026Demo(true)
                                         demoStatusText = "Removed all [Demo] records. Personal records were preserved."
                                     }
                                     .onFailure { err ->

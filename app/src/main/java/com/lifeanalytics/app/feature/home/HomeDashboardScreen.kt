@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RateReview
@@ -26,6 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,17 +53,24 @@ import com.lifeanalytics.app.core.designsystem.LaIconChip
 import com.lifeanalytics.app.core.designsystem.LaOverallPerformanceCard
 import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
+import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
+import com.lifeanalytics.app.data.demo.SampleDataSeeder
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
 import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
 import com.lifeanalytics.app.domain.model.Task
+import com.lifeanalytics.app.domain.model.TransactionType
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
+import com.lifeanalytics.app.feature.finance.TransactionFormDialog
+import com.lifeanalytics.app.feature.habits.HabitFormDialog
+import com.lifeanalytics.app.feature.planning.TaskFormDialog
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -103,15 +112,43 @@ fun HomeDashboardScreen(
     val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
 
     var analyticsWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.MONTHLY) }
+    var analyticsAnchorEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    var userAdjustedAnchor by rememberSaveable { mutableStateOf(false) }
     var selectedTrendPointIdx by rememberSaveable { mutableIntStateOf(0) }
     var drilldownDateEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
+    // If the current month (e.g. Nov 2026) has no records yet, but October 2026 sample data is present,
+    // automatically anchor the Monthly analytics card to October 2026 so the Home Page immediately
+    // displays the October 2026 overall score, category breakdowns, and trend!
+    val currentMonthYm = remember(today) { YearMonth.from(today) }
+    val sampleMonthYm = remember(today) { SampleDataSeeder.targetSampleMonth(today) }
+
+    LaunchedEffect(allTasks.size, allCompletions.size, allTransactions.size, userAdjustedAnchor) {
+        if (!userAdjustedAnchor && analyticsWindow == AnalyticsTimeWindow.MONTHLY) {
+            val hasCurrentMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == currentMonthYm } ||
+                allCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == currentMonthYm } ||
+                allTransactions.any { YearMonth.from(it.transactionDate) == currentMonthYm }
+
+            val hasSampleMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == sampleMonthYm } ||
+                allCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == sampleMonthYm } ||
+                allTransactions.any { YearMonth.from(it.transactionDate) == sampleMonthYm }
+
+            if (!hasCurrentMonthActivity && hasSampleMonthActivity) {
+                analyticsAnchorEpoch = sampleMonthYm.atEndOfMonth().toEpochDay()
+            } else if (hasCurrentMonthActivity) {
+                analyticsAnchorEpoch = today.toEpochDay()
+            }
+        }
+    }
+
+    val analyticsAnchorDate = LocalDate.ofEpochDay(analyticsAnchorEpoch)
+
     val lifePerformance = remember(
-        analyticsWindow, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
+        analyticsWindow, analyticsAnchorDate, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
     ) {
         LifeAnalyticsEngine.evaluatePeriodPerformance(
             window = analyticsWindow,
-            anchorDate = today,
+            anchorDate = analyticsAnchorDate,
             today = today,
             habits = allHabits,
             completions = allCompletions,
@@ -123,11 +160,11 @@ fun HomeDashboardScreen(
     }
 
     val trendSeries = remember(
-        analyticsWindow, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
+        analyticsWindow, analyticsAnchorDate, today, allHabits, allCompletions, allTasks, allTransactions, monthlyBudgetMinor
     ) {
         LifeAnalyticsEngine.buildPerformanceTrendSeries(
             window = analyticsWindow,
-            anchorDate = today,
+            anchorDate = analyticsAnchorDate,
             today = today,
             habits = allHabits,
             completions = allCompletions,
@@ -135,6 +172,14 @@ fun HomeDashboardScreen(
             transactions = allTransactions,
             monthlyBudgetMinor = monthlyBudgetMinor
         )
+    }
+
+    // Default selected trend point to the latest scored bucket
+    LaunchedEffect(trendSeries) {
+        val lastScoredIdx = trendSeries.indexOfLast { it.overallScore != null }
+        if (lastScoredIdx >= 0) {
+            selectedTrendPointIdx = lastScoredIdx
+        }
     }
 
     val yearCalendarModel = remember(
@@ -168,6 +213,9 @@ fun HomeDashboardScreen(
 
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showAddTaskDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddHabitDialog by rememberSaveable { mutableStateOf(false) }
+    var showAddExpenseDialog by rememberSaveable { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val colors = LaTheme.colors
@@ -296,14 +344,49 @@ fun HomeDashboardScreen(
             // 3. Overall Life Performance / Score
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    val isAtCurrentPeriod = when (analyticsWindow) {
+                        AnalyticsTimeWindow.DAILY -> analyticsAnchorDate == today
+                        AnalyticsTimeWindow.WEEKLY ->
+                            DateAttributionPolicy.isoWeekRange(analyticsAnchorDate) == DateAttributionPolicy.isoWeekRange(today)
+                        AnalyticsTimeWindow.MONTHLY ->
+                            YearMonth.from(analyticsAnchorDate) == YearMonth.from(today)
+                        AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.year == today.year
+                    }
+
                     LaOverallPerformanceCard(
                         performance = lifePerformance,
                         selectedWindow = analyticsWindow,
-                        onSelectWindow = {
-                            analyticsWindow = it
-                            selectedTrendPointIdx = 0
+                        onSelectWindow = { newWin ->
+                            analyticsWindow = newWin
+                            if (newWin == AnalyticsTimeWindow.YEARLY) {
+                                analyticsAnchorEpoch = today.toEpochDay()
+                            }
                         },
-                        showWindowSelector = true
+                        showWindowSelector = true,
+                        onPreviousPeriod = {
+                            userAdjustedAnchor = true
+                            analyticsAnchorEpoch = when (analyticsWindow) {
+                                AnalyticsTimeWindow.DAILY -> analyticsAnchorDate.minusDays(1).toEpochDay()
+                                AnalyticsTimeWindow.WEEKLY -> analyticsAnchorDate.minusWeeks(1).toEpochDay()
+                                AnalyticsTimeWindow.MONTHLY -> analyticsAnchorDate.minusMonths(1).toEpochDay()
+                                AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.minusYears(1).toEpochDay()
+                            }
+                        },
+                        onNextPeriod = {
+                            userAdjustedAnchor = true
+                            analyticsAnchorEpoch = when (analyticsWindow) {
+                                AnalyticsTimeWindow.DAILY -> analyticsAnchorDate.plusDays(1).toEpochDay()
+                                AnalyticsTimeWindow.WEEKLY -> analyticsAnchorDate.plusWeeks(1).toEpochDay()
+                                AnalyticsTimeWindow.MONTHLY -> analyticsAnchorDate.plusMonths(1).toEpochDay()
+                                AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.plusYears(1).toEpochDay()
+                            }
+                        },
+                        onResetToToday = if (!isAtCurrentPeriod) {
+                            {
+                                userAdjustedAnchor = true
+                                analyticsAnchorEpoch = today.toEpochDay()
+                            }
+                        } else null
                     )
                 }
             }
@@ -349,12 +432,28 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 6. Daily Habits and Tasks Summary (Compact Today Execution Panel — no redundant Add buttons)
+            // 6. Daily Habits and Tasks Summary
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    // If today has no tasks/due habits yet, also summarize the active period's totals so sample data is visible
+                    val periodCareer = lifePerformance.career
+                    val periodHealth = lifePerformance.health
+                    val periodDueHabits = periodHealth.scheduledCount + periodCareer.habitScheduledCount
+                    val periodDoneHabits = periodHealth.completedCount + periodCareer.habitCompletedCount
+                    val periodPlannedTasks = periodCareer.taskPlannedCount + periodHealth.healthTasksPlanned
+                    val periodDoneTasks = periodCareer.taskCompletedCount + periodHealth.healthTasksCompleted
+
+                    val subText = if (habitSummary.totalDueCount > 0 || taskSummary.totalCount > 0) {
+                        "Today: Habits ${habitSummary.completedDueCount}/${habitSummary.totalDueCount} • Tasks ${taskSummary.completedCount}/${taskSummary.totalCount}"
+                    } else if (periodDueHabits > 0 || periodPlannedTasks > 0) {
+                        "${lifePerformance.periodLabel}: Habits $periodDoneHabits/$periodDueHabits • Tasks $periodDoneTasks/$periodPlannedTasks"
+                    } else {
+                        "Today: Habits 0/0 • Tasks 0/0"
+                    }
+
                     LaContainerPanel(
-                        title = "Today's habits & tasks",
-                        subtitle = "Habits ${habitSummary.completedDueCount}/${habitSummary.totalDueCount} • Tasks ${taskSummary.completedCount}/${taskSummary.totalCount}"
+                        title = "Daily habits & tasks",
+                        subtitle = subText
                     ) {
                         // Habits subsection
                         Row(
@@ -363,12 +462,12 @@ fun HomeDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Habits (${habitSummary.completedDueCount}/${habitSummary.totalDueCount})",
+                                text = "Today's habits (${habitSummary.completedDueCount}/${habitSummary.totalDueCount})",
                                 style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "Manage",
+                                text = "All habits",
                                 style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
                                 color = colors.accent,
                                 modifier = Modifier
@@ -380,8 +479,13 @@ fun HomeDashboardScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         if (habitSummary.dueHabits.isEmpty()) {
+                            val hint = if (periodDueHabits > 0) {
+                                "None due today • $periodDoneHabits/$periodDueHabits completed in ${lifePerformance.periodLabel}"
+                            } else {
+                                "No habits due today"
+                            }
                             Text(
-                                text = "No habits due today",
+                                text = hint,
                                 style = LaTheme.typography.label,
                                 color = colors.textSecondary
                             )
@@ -446,12 +550,12 @@ fun HomeDashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Tasks (${taskSummary.completedCount}/${taskSummary.totalCount})",
+                                text = "Today's tasks (${taskSummary.completedCount}/${taskSummary.totalCount})",
                                 style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "Manage",
+                                text = "All tasks",
                                 style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
                                 color = colors.accent,
                                 modifier = Modifier
@@ -463,8 +567,13 @@ fun HomeDashboardScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         if (todayTasks.isEmpty()) {
+                            val hint = if (periodPlannedTasks > 0) {
+                                "None planned today • $periodDoneTasks/$periodPlannedTasks completed in ${lifePerformance.periodLabel}"
+                            } else {
+                                "No tasks planned for today"
+                            }
                             Text(
-                                text = "No tasks planned for today",
+                                text = hint,
                                 style = LaTheme.typography.label,
                                 color = colors.textSecondary
                             )
@@ -487,6 +596,38 @@ fun HomeDashboardScreen(
                             }
                         }
                     }
+                }
+            }
+
+            // 7. Essential Quick Actions: Add Task, Add Habit, Add Expense (Single compact row)
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = spacing.screenInset),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    LaSecondaryButton(
+                        text = "Add task",
+                        icon = Icons.Outlined.Add,
+                        onClick = { showAddTaskDialog = true },
+                        containerColor = colors.surface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaSecondaryButton(
+                        text = "Add habit",
+                        icon = Icons.Outlined.Add,
+                        onClick = { showAddHabitDialog = true },
+                        containerColor = colors.surface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaSecondaryButton(
+                        text = "Add expense",
+                        icon = Icons.Outlined.Add,
+                        onClick = { showAddExpenseDialog = true },
+                        containerColor = colors.surface,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -521,6 +662,80 @@ fun HomeDashboardScreen(
             onOpenPlanningForDate = onNavigateToPlanning,
             onOpenHabitsForDate = onNavigateToHabits,
             onOpenFinanceForDate = onNavigateToFinanceDay
+        )
+    }
+
+    if (showAddTaskDialog) {
+        TaskFormDialog(
+            initialTask = null,
+            defaultDate = today,
+            onDismiss = { showAddTaskDialog = false },
+            onSave = { title, category, plannedDate, plannedTime, estimateMinutes, lifeArea ->
+                repository.createTask(
+                    title = title,
+                    category = category,
+                    plannedDate = plannedDate,
+                    plannedTime = plannedTime,
+                    estimatedDurationMinutes = estimateMinutes,
+                    lifeArea = lifeArea
+                ).map {
+                    showAddTaskDialog = false
+                    scope.launch { snackbarHostState.showSnackbar("Task saved") }
+                }
+            }
+        )
+    }
+
+    if (showAddHabitDialog) {
+        HabitFormDialog(
+            initialHabit = null,
+            effectiveDate = today,
+            onDismiss = { showAddHabitDialog = false },
+            onSave = { name, weekdays, lifeArea ->
+                scope.launch {
+                    repository.createHabit(
+                        name = name,
+                        weekdays = weekdays,
+                        effectiveFrom = today,
+                        lifeArea = lifeArea
+                    ).onSuccess {
+                        showAddHabitDialog = false
+                        snackbarHostState.showSnackbar("Habit saved")
+                    }.onFailure { err ->
+                        errorMessage = err.message ?: "Unable to save habit."
+                    }
+                }
+            },
+            onDeactivate = null,
+            onRequestDelete = null
+        )
+    }
+
+    if (showAddExpenseDialog) {
+        TransactionFormDialog(
+            initialTransaction = null,
+            defaultType = TransactionType.EXPENSE,
+            defaultDate = today,
+            currencyCode = currencyCode,
+            onDismiss = { showAddExpenseDialog = false },
+            onSave = { type, amountMinor, category, date, note ->
+                scope.launch {
+                    repository.saveTransaction(
+                        transactionId = null,
+                        type = type,
+                        amountMinor = amountMinor,
+                        currencyCode = currencyCode,
+                        category = category,
+                        transactionDate = date,
+                        note = note
+                    ).onSuccess {
+                        showAddExpenseDialog = false
+                        snackbarHostState.showSnackbar("Expense saved")
+                    }.onFailure { err ->
+                        errorMessage = err.message ?: "Unable to save expense."
+                    }
+                }
+            }
         )
     }
 }

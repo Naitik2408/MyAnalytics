@@ -2035,7 +2035,10 @@ fun LaOverallPerformanceCard(
     selectedWindow: com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow,
     onSelectWindow: (com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow) -> Unit,
     modifier: Modifier = Modifier,
-    showWindowSelector: Boolean = true
+    showWindowSelector: Boolean = true,
+    onPreviousPeriod: (() -> Unit)? = null,
+    onNextPeriod: (() -> Unit)? = null,
+    onResetToToday: (() -> Unit)? = null
 ) {
     val colors = LaTheme.colors
     val spacing = LaTheme.spacing
@@ -2048,7 +2051,7 @@ fun LaOverallPerformanceCard(
             .padding(spacing.tilePadding),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Header row: Concise Title + Coverage Badge
+        // Header row: Concise Title + Period Navigator + Coverage Badge
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2060,11 +2063,65 @@ fun LaOverallPerformanceCard(
                     style = LaTheme.typography.sectionTitle,
                     color = colors.textPrimary
                 )
-                Text(
-                    text = performance.periodLabel,
-                    style = LaTheme.typography.label,
-                    color = colors.textSecondary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (onPreviousPeriod != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceVariant)
+                                .pressScaleClickable(onClick = onPreviousPeriod),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronLeft,
+                                contentDescription = "Previous period",
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = performance.periodLabel,
+                        style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textSecondary
+                    )
+                    if (onNextPeriod != null) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(colors.surfaceVariant)
+                                .pressScaleClickable(onClick = onNextPeriod),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = "Next period",
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    if (onResetToToday != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(LaTheme.radii.shapeFull)
+                                .background(colors.tints.lavender.soft)
+                                .pressScaleClickable(onClick = onResetToToday)
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Now",
+                                style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                        }
+                    }
+                }
             }
             Box(
                 modifier = Modifier
