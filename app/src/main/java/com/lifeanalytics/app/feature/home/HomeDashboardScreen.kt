@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RateReview
@@ -341,67 +343,33 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 3. Overall Life Performance / Score
+            // 3. Quick Action Buttons: Add task, Add habit, Add expense (Immediately below Heatmap)
             item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    val isAtCurrentPeriod = when (analyticsWindow) {
-                        AnalyticsTimeWindow.DAILY -> analyticsAnchorDate == today
-                        AnalyticsTimeWindow.WEEKLY ->
-                            DateAttributionPolicy.isoWeekRange(analyticsAnchorDate) == DateAttributionPolicy.isoWeekRange(today)
-                        AnalyticsTimeWindow.MONTHLY ->
-                            YearMonth.from(analyticsAnchorDate) == YearMonth.from(today)
-                        AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.year == today.year
-                    }
-
-                    LaOverallPerformanceCard(
-                        performance = lifePerformance,
-                        selectedWindow = analyticsWindow,
-                        onSelectWindow = { newWin ->
-                            analyticsWindow = newWin
-                            if (newWin == AnalyticsTimeWindow.YEARLY) {
-                                analyticsAnchorEpoch = today.toEpochDay()
-                            }
-                        },
-                        showWindowSelector = true,
-                        onPreviousPeriod = {
-                            userAdjustedAnchor = true
-                            analyticsAnchorEpoch = when (analyticsWindow) {
-                                AnalyticsTimeWindow.DAILY -> analyticsAnchorDate.minusDays(1).toEpochDay()
-                                AnalyticsTimeWindow.WEEKLY -> analyticsAnchorDate.minusWeeks(1).toEpochDay()
-                                AnalyticsTimeWindow.MONTHLY -> analyticsAnchorDate.minusMonths(1).toEpochDay()
-                                AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.minusYears(1).toEpochDay()
-                            }
-                        },
-                        onNextPeriod = {
-                            userAdjustedAnchor = true
-                            analyticsAnchorEpoch = when (analyticsWindow) {
-                                AnalyticsTimeWindow.DAILY -> analyticsAnchorDate.plusDays(1).toEpochDay()
-                                AnalyticsTimeWindow.WEEKLY -> analyticsAnchorDate.plusWeeks(1).toEpochDay()
-                                AnalyticsTimeWindow.MONTHLY -> analyticsAnchorDate.plusMonths(1).toEpochDay()
-                                AnalyticsTimeWindow.YEARLY -> analyticsAnchorDate.plusYears(1).toEpochDay()
-                            }
-                        },
-                        onResetToToday = if (!isAtCurrentPeriod) {
-                            {
-                                userAdjustedAnchor = true
-                                analyticsAnchorEpoch = today.toEpochDay()
-                            }
-                        } else null
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = spacing.screenInset),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HomeActionPillButton(
+                        text = "Add task",
+                        onClick = { showAddTaskDialog = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                    HomeActionPillButton(
+                        text = "Add habit",
+                        onClick = { showAddHabitDialog = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                    HomeActionPillButton(
+                        text = "Add expense",
+                        onClick = { showAddExpenseDialog = true },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            // 4. Category-wise Performance
-            item {
-                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    LaCategoryPerformancePanel(
-                        performance = lifePerformance,
-                        currencyCode = currencyCode
-                    )
-                }
-            }
-
-            // 5. Performance Trend / Graph
+            // 4. Single Streamlined Performance Trend Card (Visual curve, no cluttered number tables)
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
                     val safeTrendIdx = selectedTrendPointIdx.coerceIn(
@@ -412,7 +380,7 @@ fun HomeDashboardScreen(
                     val chartSubtitle = if (selectedPt?.overallScore != null) {
                         "${selectedPt.label} • ${selectedPt.overallScore}/100"
                     } else {
-                        "${analyticsWindow.label} score trend"
+                        "Performance trajectory"
                     }
                     LaContainerPanel(
                         title = "Performance trend",
@@ -425,158 +393,71 @@ fun HomeDashboardScreen(
                             selectedIndex = safeTrendIdx,
                             onSelectIndex = { selectedTrendPointIdx = it },
                             tint = colors.tints.lavender,
-                            emptyMessage = "No scored intervals in this window yet.",
-                            accessibilitySummary = "Performance trend chart for ${analyticsWindow.label} window."
+                            emptyMessage = "No scored intervals yet.",
+                            accessibilitySummary = "Performance trend chart."
                         )
                     }
                 }
             }
 
-            // 6. Daily Habits and Tasks Summary
+            // 5. Today's Tasks (Matching Image 5 layout with View all & interactive items)
             item {
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    // If today has no tasks/due habits yet, also summarize the active period's totals so sample data is visible
-                    val periodCareer = lifePerformance.career
-                    val periodHealth = lifePerformance.health
-                    val periodDueHabits = periodHealth.scheduledCount + periodCareer.habitScheduledCount
-                    val periodDoneHabits = periodHealth.completedCount + periodCareer.habitCompletedCount
-                    val periodPlannedTasks = periodCareer.taskPlannedCount + periodHealth.healthTasksPlanned
-                    val periodDoneTasks = periodCareer.taskCompletedCount + periodHealth.healthTasksCompleted
-
-                    val subText = if (habitSummary.totalDueCount > 0 || taskSummary.totalCount > 0) {
-                        "Today: Habits ${habitSummary.completedDueCount}/${habitSummary.totalDueCount} • Tasks ${taskSummary.completedCount}/${taskSummary.totalCount}"
-                    } else if (periodDueHabits > 0 || periodPlannedTasks > 0) {
-                        "${lifePerformance.periodLabel}: Habits $periodDoneHabits/$periodDueHabits • Tasks $periodDoneTasks/$periodPlannedTasks"
-                    } else {
-                        "Today: Habits 0/0 • Tasks 0/0"
-                    }
-
                     LaContainerPanel(
-                        title = "Daily habits & tasks",
-                        subtitle = subText
+                        title = "Today's tasks",
+                        actionLabel = "View all",
+                        onActionClick = { onNavigateToPlanning(today) }
                     ) {
-                        // Habits subsection
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Today's habits (${habitSummary.completedDueCount}/${habitSummary.totalDueCount})",
-                                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "All habits",
-                                style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.accent,
-                                modifier = Modifier
-                                    .pressScaleClickable { onNavigateToHabits(today) }
-                                    .padding(vertical = 2.dp, horizontal = 4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        if (habitSummary.dueHabits.isEmpty()) {
-                            val hint = if (periodDueHabits > 0) {
-                                "None due today • $periodDoneHabits/$periodDueHabits completed in ${lifePerformance.periodLabel}"
-                            } else {
-                                "No habits due today"
-                            }
-                            Text(
-                                text = hint,
-                                style = LaTheme.typography.label,
-                                color = colors.textSecondary
-                            )
-                        } else {
-                            habitSummary.dueHabits.forEachIndexed { index, item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .pressScaleClickable {
-                                            scope.launch {
-                                                repository.setHabitCompletionForDate(
-                                                    habitId = item.habit.id,
-                                                    date = today,
-                                                    completed = !item.isCompleted
-                                                ).onFailure { errorMessage = it.message }
-                                            }
-                                        }
-                                        .padding(vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    LaAnimatedCheckbox(
-                                        checked = item.isCompleted,
-                                        onCheckedChange = { checked ->
-                                            scope.launch {
-                                                repository.setHabitCompletionForDate(
-                                                    habitId = item.habit.id,
-                                                    date = today,
-                                                    completed = checked
-                                                ).onFailure { errorMessage = it.message }
-                                            }
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = item.habit.name,
-                                        style = LaTheme.typography.body.copy(fontWeight = FontWeight.Medium),
-                                        color = colors.textPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    item.habit.lifeArea?.let { area ->
-                                        Text(
-                                            text = area.shortName,
-                                            style = LaTheme.typography.chartMicroLabel,
-                                            color = colors.textSecondary
-                                        )
-                                    }
-                                }
-                                if (index < habitSummary.dueHabits.lastIndex) {
-                                    LaRowDivider()
-                                }
-                            }
-                        }
-
-                        LaRowDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                        // Tasks subsection
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Today's tasks (${taskSummary.completedCount}/${taskSummary.totalCount})",
-                                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "All tasks",
-                                style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.accent,
-                                modifier = Modifier
-                                    .pressScaleClickable { onNavigateToPlanning(today) }
-                                    .padding(vertical = 2.dp, horizontal = 4.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
                         if (todayTasks.isEmpty()) {
-                            val hint = if (periodPlannedTasks > 0) {
-                                "None planned today • $periodDoneTasks/$periodPlannedTasks completed in ${lifePerformance.periodLabel}"
-                            } else {
-                                "No tasks planned for today"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.tints.lavender.base),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CalendarToday,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "No tasks planned for today",
+                                        style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
+                                        color = colors.textPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Add your key tasks for today to keep your plan clear.",
+                                        style = LaTheme.typography.label,
+                                        color = colors.textSecondary
+                                    )
+                                }
                             }
-                            Text(
-                                text = hint,
-                                style = LaTheme.typography.label,
-                                color = colors.textSecondary
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(colors.tints.lavender.base)
+                                    .pressScaleClickable { showAddTaskDialog = true }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = "Add task",
+                                    style = LaTheme.typography.buttonLabel.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.accent
+                                )
+                            }
                         } else {
                             val previewTasks = todayTasks.take(5)
                             previewTasks.forEachIndexed { index, task ->
@@ -599,35 +480,83 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 7. Essential Quick Actions: Add Task, Add Habit, Add Expense (Single compact row)
+            // 6. Today's Habits (Matching Image 5 layout with checkable items and Due today badges)
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = spacing.screenInset),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    LaSecondaryButton(
-                        text = "Add task",
-                        icon = Icons.Outlined.Add,
-                        onClick = { showAddTaskDialog = true },
-                        containerColor = colors.surface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    LaSecondaryButton(
-                        text = "Add habit",
-                        icon = Icons.Outlined.Add,
-                        onClick = { showAddHabitDialog = true },
-                        containerColor = colors.surface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    LaSecondaryButton(
-                        text = "Add expense",
-                        icon = Icons.Outlined.Add,
-                        onClick = { showAddExpenseDialog = true },
-                        containerColor = colors.surface,
-                        modifier = Modifier.weight(1f)
-                    )
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    LaContainerPanel(
+                        title = "Today's habits",
+                        subtitle = "${habitSummary.completedDueCount} of ${habitSummary.totalDueCount} completed",
+                        actionLabel = "View all",
+                        onActionClick = { onNavigateToHabits(today) }
+                    ) {
+                        if (habitSummary.dueHabits.isEmpty()) {
+                            Text(
+                                text = "No habits due today",
+                                style = LaTheme.typography.label,
+                                color = colors.textSecondary,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        } else {
+                            habitSummary.dueHabits.forEachIndexed { index, item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pressScaleClickable {
+                                            scope.launch {
+                                                repository.setHabitCompletionForDate(
+                                                    habitId = item.habit.id,
+                                                    date = today,
+                                                    completed = !item.isCompleted
+                                                ).onFailure { errorMessage = it.message }
+                                            }
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    LaAnimatedCheckbox(
+                                        checked = item.isCompleted,
+                                        onCheckedChange = { checked ->
+                                            scope.launch {
+                                                repository.setHabitCompletionForDate(
+                                                    habitId = item.habit.id,
+                                                    date = today,
+                                                    completed = checked
+                                                ).onFailure { errorMessage = it.message }
+                                            }
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = item.habit.name,
+                                        style = LaTheme.typography.body.copy(
+                                            fontWeight = FontWeight.Medium,
+                                            textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                                        ),
+                                        color = if (item.isCompleted) colors.textSecondary else colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(colors.tints.lavender.base)
+                                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "Due today",
+                                            style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                            color = colors.accent
+                                        )
+                                    }
+                                }
+                                if (index < habitSummary.dueHabits.lastIndex) {
+                                    LaRowDivider()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -855,6 +784,39 @@ private fun HomeTaskListRow(
             text = task.lifeArea?.shortName ?: task.category.displayName,
             style = LaTheme.typography.chartMicroLabel,
             color = colors.textSecondary
+        )
+    }
+}
+
+@Composable
+private fun HomeActionPillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LaTheme.colors
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(colors.surface)
+            .border(1.dp, colors.outline.copy(alpha = 0.5f), CircleShape)
+            .pressScaleClickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Add,
+            contentDescription = null,
+            tint = colors.accent,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = text,
+            style = LaTheme.typography.buttonLabel.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.textPrimary,
+            maxLines = 1
         )
     }
 }

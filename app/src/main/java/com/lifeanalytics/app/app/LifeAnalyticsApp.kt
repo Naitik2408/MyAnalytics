@@ -37,6 +37,10 @@ import com.lifeanalytics.app.feature.activity.ActivityHubScreen
 import com.lifeanalytics.app.feature.finance.FinanceScreen
 import com.lifeanalytics.app.feature.habits.DailyHabitsScreen
 import com.lifeanalytics.app.feature.home.HomeDashboardScreen
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.WorkOutline
+import com.lifeanalytics.app.feature.career.CareerScreen
+import com.lifeanalytics.app.feature.health.HealthScreen
 import com.lifeanalytics.app.feature.insights.InsightsScreen
 import com.lifeanalytics.app.feature.planning.DailyPlanningScreen
 import com.lifeanalytics.app.feature.review.DailyReviewScreen
@@ -49,9 +53,9 @@ enum class PrimaryDestination(
     val icon: ImageVector
 ) {
     HOME("home", "Home", Icons.Outlined.Home),
-    FINANCE("finance", "Finance", Icons.Outlined.AccountBalanceWallet),
-    ACTIVITY("activity", "Activity", Icons.AutoMirrored.Outlined.EventNote),
-    INSIGHTS("insights", "Insights", Icons.Outlined.BarChart)
+    HEALTH("health", "Health", Icons.Outlined.FavoriteBorder),
+    CAREER("career", "Career", Icons.Outlined.WorkOutline),
+    FINANCE("finance", "Finance", Icons.Outlined.AccountBalanceWallet)
 }
 
 @Composable
@@ -135,12 +139,27 @@ fun LifeAnalyticsApp(
                         navController.navigate("settings")
                     },
                     onNavigateToInsights = {
-                        navController.navigate(PrimaryDestination.INSIGHTS.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                        }
+                        navController.navigate("insights")
+                    }
+                )
+            }
+
+            composable(PrimaryDestination.HEALTH.route) {
+                HealthScreen(
+                    repository = repository,
+                    onNavigateToAllHabits = {
+                        habitsDateEpoch = today.toEpochDay()
+                        navController.navigate("habits")
+                    }
+                )
+            }
+
+            composable(PrimaryDestination.CAREER.route) {
+                CareerScreen(
+                    repository = repository,
+                    onNavigateToAllTasks = {
+                        planningDateEpoch = today.toEpochDay()
+                        navController.navigate("planning")
                     }
                 )
             }
@@ -157,7 +176,7 @@ fun LifeAnalyticsApp(
                 )
             }
 
-            composable(PrimaryDestination.ACTIVITY.route) {
+            composable("activity") {
                 ActivityHubScreen(
                     repository = repository,
                     onOpenPlanning = { date ->
@@ -175,7 +194,7 @@ fun LifeAnalyticsApp(
                 )
             }
 
-            composable(PrimaryDestination.INSIGHTS.route) {
+            composable("insights") {
                 InsightsScreen(
                     repository = repository,
                     currencyCode = preferences.currencyCode,

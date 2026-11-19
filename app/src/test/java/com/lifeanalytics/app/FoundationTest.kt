@@ -8,6 +8,6 @@ class FoundationTest {
     @Test
     fun primaryNavigationDestinations_matchProductSpecification() {
         val routes = PrimaryDestination.entries.map { it.route }
-        assertEquals(listOf("home", "finance", "activity", "insights"), routes)
+        assertEquals(listOf("home", "health", "career", "finance"), routes)
     }
 }
