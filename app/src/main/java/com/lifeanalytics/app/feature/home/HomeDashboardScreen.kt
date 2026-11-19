@@ -70,9 +70,13 @@ import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
 import com.lifeanalytics.app.core.designsystem.LaStatTile
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
+import com.lifeanalytics.app.core.designsystem.LaDirectionCard
 import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
+import com.lifeanalytics.app.domain.growth.GrowthEngine
+import com.lifeanalytics.app.domain.growth.GrowthInputData
+import com.lifeanalytics.app.domain.growth.GrowthWindow
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
 import com.lifeanalytics.app.domain.model.ReviewStatus
 import com.lifeanalytics.app.domain.model.Task
@@ -95,7 +99,8 @@ fun HomeDashboardScreen(
     onNavigateToHabits: (LocalDate) -> Unit,
     onNavigateToFinanceDay: (LocalDate) -> Unit,
     onNavigateToDailyReview: (LocalDate) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToInsights: () -> Unit = {}
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     val greeting = remember { DateAttributionPolicy.greetingForHour(LocalTime.now().hour) }
@@ -131,9 +136,118 @@ fun HomeDashboardScreen(
         repository.observeTransactionsForDate(today)
     }.collectAsState(initial = emptyList())
 
+    val allTasks by repository.observeAllTasks().collectAsState(initial = emptyList())
+    val allSessions by repository.observeAllSessions().collectAsState(initial = emptyList())
+    val allCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
+    val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
+
     val todayReview by remember(today) {
         repository.observeReviewForDate(today)
     }.collectAsState(initial = null)
+
+    var growthWindow by rememberSaveable { mutableStateOf(GrowthWindow.WEEK) }
+
+    val growthDirectionResult = remember(
+        growthWindow, today, allTasks, allHabits, allCompletions, allSessions, allTransactions
+    ) {
+        val bounds = GrowthEngine.calculatePeriodBounds(growthWindow, today)
+
+        // Recorded days set across all source facts
+        val recordedDates = mutableSetOf<LocalDate>()
+        allCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
+        allTasks.forEach { task ->
+            recordedDates.add(task.plannedDate)
+            task.completedAtEpochMillis?.let { ms ->
+                recordedDates.add(DateAttributionPolicy.localDateForEvent(ms, null))
+            }
+        }
+        allSessions.forEach { session ->
+            if (session.status == FocusSessionStatus.COMPLETED) {
+                recordedDates.add(session.startedLocalDate)
+            }
+        }
+        allTransactions.forEach { tx -> recordedDates.add(tx.transactionDate) }
+
+        // Habits evaluation
+        val currHabitsSummary = DomainCalculations.calculateHabitPeriodConsistency(
+            habits = allHabits,
+            completions = allCompletions,
+            startDate = bounds.currentStart,
+            endDate = bounds.currentEnd,
+            today = today.minusDays(1) // strictly completed days
+        )
+        val prevHabitsSummary = DomainCalculations.calculateHabitPeriodConsistency(
+            habits = allHabits,
+            completions = allCompletions,
+            startDate = bounds.previousStart,
+            endDate = bounds.previousEnd,
+            today = today
+        )
+
+        // Tasks evaluation (completed days only)
+        val currTasks = allTasks.filter { task ->
+            !task.plannedDate.isBefore(bounds.currentStart) && !task.plannedDate.isAfter(bounds.currentEnd)
+        }
+        val prevTasks = allTasks.filter { task ->
+            !task.plannedDate.isBefore(bounds.previousStart) && !task.plannedDate.isAfter(bounds.previousEnd)
+        }
+
+        // Focus sessions evaluation (completed days only)
+        val currSessions = allSessions.filter { session ->
+            session.status == FocusSessionStatus.COMPLETED &&
+                !session.startedLocalDate.isBefore(bounds.currentStart) &&
+                !session.startedLocalDate.isAfter(bounds.currentEnd)
+        }
+        val prevSessions = allSessions.filter { session ->
+            session.status == FocusSessionStatus.COMPLETED &&
+                !session.startedLocalDate.isBefore(bounds.previousStart) &&
+                !session.startedLocalDate.isAfter(bounds.previousEnd)
+        }
+
+        // Finance evaluation (includes today for open period)
+        val currFinanceTx = allTransactions.filter { tx ->
+            !tx.transactionDate.isBefore(bounds.currentStart) && !tx.transactionDate.isAfter(today)
+        }
+        val prevFinanceTx = allTransactions.filter { tx ->
+            !tx.transactionDate.isBefore(bounds.previousStart) && !tx.transactionDate.isAfter(bounds.previousEnd)
+        }
+        val currFinSummary = DomainCalculations.calculateFinancePeriodSummary(currFinanceTx)
+        val prevFinSummary = DomainCalculations.calculateFinancePeriodSummary(prevFinanceTx)
+
+        val prevFinanceRecordedDays = prevFinanceTx.map { it.transactionDate }.toSet().size
+
+        val isClosed = when (growthWindow) {
+            GrowthWindow.DAY -> true
+            GrowthWindow.WEEK -> false
+            GrowthWindow.MONTH -> today.dayOfMonth == 1 && today.minusDays(1).month == bounds.currentStart.month
+            GrowthWindow.YEAR -> today.dayOfYear == 1 && today.minusDays(1).year == bounds.currentStart.year
+        }
+
+        val input = GrowthInputData(
+            today = today,
+            window = growthWindow,
+            recordedDates = recordedDates,
+            currentHabitsCompleted = currHabitsSummary.completedDueOccurrences,
+            currentHabitsDue = currHabitsSummary.totalDueOccurrences,
+            previousHabitsCompleted = prevHabitsSummary.completedDueOccurrences,
+            previousHabitsDue = prevHabitsSummary.totalDueOccurrences,
+            currentTasksCompleted = currTasks.count { it.isCompleted },
+            currentTasksPlanned = currTasks.size,
+            previousTasksCompleted = prevTasks.count { it.isCompleted },
+            previousTasksPlanned = prevTasks.size,
+            currentFocusDurationSeconds = DomainCalculations.sumCompletedFocusDurationSeconds(currSessions),
+            previousFocusDurationSeconds = DomainCalculations.sumCompletedFocusDurationSeconds(prevSessions),
+            currentIncomeMinor = currFinSummary.totalIncomeMinor,
+            currentExpenseMinor = currFinSummary.totalExpenseMinor,
+            previousIncomeMinor = prevFinSummary.totalIncomeMinor,
+            previousExpenseMinor = prevFinSummary.totalExpenseMinor,
+            currentPeriodHasTransactions = currFinanceTx.isNotEmpty(),
+            previousPeriodRecordedDays = prevFinanceRecordedDays,
+            isCurrentPeriodClosed = isClosed
+        )
+
+        GrowthEngine.evaluate(input)
+    }
 
     val taskSummary = remember(todayTasks) {
         DomainCalculations.calculateTaskSummary(todayTasks)
@@ -436,6 +550,18 @@ fun HomeDashboardScreen(
                             onStartFocusSession = { onNavigateToFocus(null) }
                         )
                     }
+                }
+            }
+
+            // 4A. Growth Direction Card (docs/14_GROWTH_ENGINE.md)
+            item {
+                Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
+                    LaDirectionCard(
+                        directionResult = growthDirectionResult,
+                        selectedWindow = growthWindow,
+                        onSelectWindow = { growthWindow = it },
+                        onNavigateToInsights = onNavigateToInsights
+                    )
                 }
             }
 

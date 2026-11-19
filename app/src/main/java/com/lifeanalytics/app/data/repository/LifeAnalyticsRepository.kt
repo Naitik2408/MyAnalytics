@@ -68,6 +68,12 @@ class LifeAnalyticsRepository(
         }
     }
 
+    fun observeAllTasks(): Flow<List<Task>> {
+        return taskDao.observeAllTasks().map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
     suspend fun getTaskById(taskId: String): Task? {
         return taskDao.getTaskById(taskId)?.toDomain()
     }
@@ -507,6 +513,12 @@ class LifeAnalyticsRepository(
         }
     }
 
+    fun observeAllHabitCompletions(): Flow<List<HabitCompletion>> {
+        return habitDao.observeAllCompletions().map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
     suspend fun createHabit(
         name: String,
         weekdays: Set<DayOfWeek>,
@@ -709,6 +721,12 @@ class LifeAnalyticsRepository(
         val startIso = DateAttributionPolicy.formatIsoDate(startDate)
         val endIso = DateAttributionPolicy.formatIsoDate(endDate)
         return financeDao.observeTransactionsInRange(startIso, endIso).map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
+    fun observeAllTransactions(): Flow<List<FinanceTransaction>> {
+        return financeDao.observeAllTransactions().map { list ->
             list.map { it.toDomain() }
         }
     }

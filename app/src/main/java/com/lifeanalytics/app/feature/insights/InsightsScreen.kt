@@ -54,9 +54,13 @@ import com.lifeanalytics.app.core.designsystem.LaSegmentedControl
 import com.lifeanalytics.app.core.designsystem.LaStatTile
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
+import com.lifeanalytics.app.core.designsystem.LaVerdictChip
 import com.lifeanalytics.app.core.designsystem.TintSteps
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
+import com.lifeanalytics.app.domain.growth.GrowthEngine
+import com.lifeanalytics.app.domain.growth.GrowthInputData
+import com.lifeanalytics.app.domain.growth.GrowthWindow
 import com.lifeanalytics.app.domain.model.FocusSessionStatus
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import com.lifeanalytics.app.domain.usecase.FinancePeriodSummary
@@ -175,6 +179,9 @@ fun InsightsScreen(
     val currentFinanceSummary = remember(currentTransactions) {
         DomainCalculations.calculateFinancePeriodSummary(currentTransactions)
     }
+    val previousFinanceSummary = remember(previousTransactions) {
+        DomainCalculations.calculateFinancePeriodSummary(previousTransactions)
+    }
 
     val taskComparison = remember(currentTaskSummary, previousTaskSummary) {
         DomainCalculations.comparePeriods(
@@ -184,6 +191,68 @@ fun InsightsScreen(
     }
     val focusComparison = remember(currentFocusSeconds, previousFocusSeconds) {
         DomainCalculations.comparePeriods(currentFocusSeconds, previousFocusSeconds)
+    }
+
+    val growthWindow = when (periodType) {
+        InsightsPeriodType.DAILY -> GrowthWindow.DAY
+        InsightsPeriodType.WEEKLY -> GrowthWindow.WEEK
+        InsightsPeriodType.MONTHLY -> GrowthWindow.MONTH
+    }
+
+    val growthDirection = remember(
+        growthWindow, today, currentTasks, previousTasks,
+        currentHabitSummary, previousHabitSummary,
+        currentFocusSeconds, previousFocusSeconds,
+        currentFinanceSummary, previousFinanceSummary,
+        currentTransactions, previousTransactions
+    ) {
+        val recordedDates = mutableSetOf<LocalDate>()
+        // Recorded days in period
+        currentHabitCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
+        previousHabitCompletions.forEach { if (it.isCompleted) recordedDates.add(it.completionDate) }
+        currentTasks.forEach { task ->
+            recordedDates.add(task.plannedDate)
+            task.completedAtEpochMillis?.let { ms ->
+                recordedDates.add(DateAttributionPolicy.localDateForEvent(ms, null))
+            }
+        }
+        previousTasks.forEach { task ->
+            recordedDates.add(task.plannedDate)
+            task.completedAtEpochMillis?.let { ms ->
+                recordedDates.add(DateAttributionPolicy.localDateForEvent(ms, null))
+            }
+        }
+        currentSessions.forEach { if (it.status == FocusSessionStatus.COMPLETED) recordedDates.add(it.startedLocalDate) }
+        previousSessions.forEach { if (it.status == FocusSessionStatus.COMPLETED) recordedDates.add(it.startedLocalDate) }
+        currentTransactions.forEach { recordedDates.add(it.transactionDate) }
+        previousTransactions.forEach { recordedDates.add(it.transactionDate) }
+
+        val prevFinanceRecordedDays = previousTransactions.map { it.transactionDate }.toSet().size
+        val isClosed = currentEnd.isBefore(today)
+
+        val input = GrowthInputData(
+            today = today,
+            window = growthWindow,
+            recordedDates = recordedDates,
+            currentHabitsCompleted = currentHabitSummary.completedDueOccurrences,
+            currentHabitsDue = currentHabitSummary.totalDueOccurrences,
+            previousHabitsCompleted = previousHabitSummary.completedDueOccurrences,
+            previousHabitsDue = previousHabitSummary.totalDueOccurrences,
+            currentTasksCompleted = currentTaskSummary.completedCount,
+            currentTasksPlanned = currentTaskSummary.totalCount,
+            previousTasksCompleted = previousTaskSummary.completedCount,
+            previousTasksPlanned = previousTaskSummary.totalCount,
+            currentFocusDurationSeconds = currentFocusSeconds,
+            previousFocusDurationSeconds = previousFocusSeconds,
+            currentIncomeMinor = currentFinanceSummary.totalIncomeMinor,
+            currentExpenseMinor = currentFinanceSummary.totalExpenseMinor,
+            previousIncomeMinor = previousFinanceSummary.totalIncomeMinor,
+            previousExpenseMinor = previousFinanceSummary.totalExpenseMinor,
+            currentPeriodHasTransactions = currentTransactions.isNotEmpty(),
+            previousPeriodRecordedDays = prevFinanceRecordedDays,
+            isCurrentPeriodClosed = isClosed
+        )
+        GrowthEngine.evaluate(input)
     }
 
     // Build chart buckets
@@ -446,6 +515,9 @@ fun InsightsScreen(
                         isEmptyValue = !currentTaskSummary.hasTasks,
                         minHeight = 144.dp,
                         modifier = mod,
+                        trailingHeader = {
+                            LaVerdictChip(verdict = growthDirection.tasksPillar.verdict)
+                        },
                         microVisual = if (currentTaskSummary.hasTasks) {
                             { LaMicroProgressBar(progress = taskRatio) }
                         } else null
@@ -461,7 +533,10 @@ fun InsightsScreen(
                         containerColor = colors.tints.butter.base,
                         isEmptyValue = currentHabitSummary.consistencyPercent == null,
                         minHeight = 144.dp,
-                        modifier = mod
+                        modifier = mod,
+                        trailingHeader = {
+                            LaVerdictChip(verdict = growthDirection.habitsPillar.verdict)
+                        }
                     )
                 }
 
@@ -475,7 +550,10 @@ fun InsightsScreen(
                         valueColor = netColor,
                         isEmptyValue = !currentFinanceSummary.hasTransactions,
                         minHeight = 132.dp,
-                        modifier = mod
+                        modifier = mod,
+                        trailingHeader = {
+                            LaVerdictChip(verdict = growthDirection.financePillar.verdict)
+                        }
                     )
                 }
 

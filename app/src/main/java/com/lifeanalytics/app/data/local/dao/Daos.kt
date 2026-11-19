@@ -26,6 +26,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE planned_date BETWEEN :startDate AND :endDate ORDER BY planned_date ASC, sort_order ASC, created_at_epoch_millis ASC")
     fun observeTasksInRange(startDate: String, endDate: String): Flow<List<TaskEntity>>
 
+    @Query("SELECT * FROM tasks ORDER BY planned_date ASC, sort_order ASC, created_at_epoch_millis ASC")
+    fun observeAllTasks(): Flow<List<TaskEntity>>
+
     @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
     suspend fun getTaskById(taskId: String): TaskEntity?
 
@@ -156,6 +159,9 @@ interface HabitDao {
 
     @Query("SELECT * FROM habit_completions WHERE completion_date BETWEEN :startDate AND :endDate")
     fun observeCompletionsInRange(startDate: String, endDate: String): Flow<List<HabitCompletionEntity>>
+
+    @Query("SELECT * FROM habit_completions ORDER BY completion_date ASC")
+    fun observeAllCompletions(): Flow<List<HabitCompletionEntity>>
 
     @Query("SELECT * FROM habit_completions WHERE habit_id = :habitId AND completion_date = :date LIMIT 1")
     suspend fun getCompletionForHabitAndDate(habitId: String, date: String): HabitCompletionEntity?

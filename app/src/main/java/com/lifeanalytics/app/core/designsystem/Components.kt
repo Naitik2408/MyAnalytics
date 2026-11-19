@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Check
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.NorthEast
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Timer
@@ -420,6 +422,7 @@ fun LaStatTile(
     isEmptyValue: Boolean = false,
     minHeight: Dp = 0.dp,
     onClick: (() -> Unit)? = null,
+    trailingHeader: (@Composable () -> Unit)? = null,
     microVisual: (@Composable () -> Unit)? = null
 ) {
     val normalizedValue = if (value.trim() == "0 / 0") "0" else value
@@ -461,7 +464,7 @@ fun LaStatTile(
             .padding(LaTheme.spacing.tilePadding),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        if (icon != null || onClick != null) {
+        if (icon != null || onClick != null || trailingHeader != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -475,7 +478,9 @@ fun LaStatTile(
                 } else {
                     Spacer(modifier = Modifier.size(38.dp))
                 }
-                if (onClick != null) {
+                if (trailingHeader != null) {
+                    trailingHeader()
+                } else if (onClick != null) {
                     LaArrowButton(
                         contentDescription = "Open $label",
                         onClick = null,
@@ -1761,3 +1766,258 @@ fun ConfirmDeleteDialog(
         }
     )
 }
+
+// -----------------------------------------------------------------------------
+// 9.7 Growth Direction Components (docs/14_GROWTH_ENGINE.md)
+// -----------------------------------------------------------------------------
+
+@Composable
+fun LaVerdictChip(
+    verdict: com.lifeanalytics.app.domain.growth.GrowthVerdict?,
+    modifier: Modifier = Modifier
+) {
+    if (verdict == null) return
+    val (bgColor, fgColor) = when (verdict) {
+        com.lifeanalytics.app.domain.growth.GrowthVerdict.IMPROVING ->
+            LaTheme.colors.tints.mint.strong to LaTheme.colors.textPrimary
+        com.lifeanalytics.app.domain.growth.GrowthVerdict.STEADY ->
+            LaTheme.colors.surfaceVariant to LaTheme.colors.textSecondary
+        com.lifeanalytics.app.domain.growth.GrowthVerdict.SLIPPING ->
+            LaTheme.colors.tints.rose.strong to LaTheme.colors.textPrimary
+    }
+    Box(
+        modifier = modifier
+            .clip(LaTheme.radii.shapeFull)
+            .background(bgColor)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = verdict.label,
+            style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+            color = fgColor
+        )
+    }
+}
+
+@Composable
+fun LaOverallVerdictBadge(
+    verdict: com.lifeanalytics.app.domain.growth.OverallVerdict,
+    modifier: Modifier = Modifier
+) {
+    val (bgColor, fgColor) = when (verdict) {
+        com.lifeanalytics.app.domain.growth.OverallVerdict.IMPROVING ->
+            LaTheme.colors.tints.mint.strong to LaTheme.colors.textPrimary
+        com.lifeanalytics.app.domain.growth.OverallVerdict.STEADY ->
+            LaTheme.colors.surfaceVariant to LaTheme.colors.textSecondary
+        com.lifeanalytics.app.domain.growth.OverallVerdict.SLIPPING ->
+            LaTheme.colors.tints.rose.strong to LaTheme.colors.textPrimary
+        com.lifeanalytics.app.domain.growth.OverallVerdict.MIXED ->
+            LaTheme.colors.tints.butter.strong to LaTheme.colors.textPrimary
+        com.lifeanalytics.app.domain.growth.OverallVerdict.BUILDING_BASELINE ->
+            LaTheme.colors.surfaceVariant to LaTheme.colors.textSecondary
+    }
+    Box(
+        modifier = modifier
+            .clip(LaTheme.radii.shapeFull)
+            .background(bgColor)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = verdict.label,
+            style = LaTheme.typography.label.copy(fontWeight = FontWeight.Bold),
+            color = fgColor
+        )
+    }
+}
+
+@Composable
+fun LaDirectionCard(
+    directionResult: com.lifeanalytics.app.domain.growth.GrowthDirectionResult,
+    selectedWindow: com.lifeanalytics.app.domain.growth.GrowthWindow,
+    onSelectWindow: (com.lifeanalytics.app.domain.growth.GrowthWindow) -> Unit,
+    modifier: Modifier = Modifier,
+    onNavigateToInsights: (() -> Unit)? = null
+) {
+    val colors = LaTheme.colors
+    val spacing = LaTheme.spacing
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(LaTheme.radii.shapeMd)
+            .background(colors.surface)
+            .padding(spacing.tilePadding)
+    ) {
+        // Top row: Section title, window selector chips, and overall verdict
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Direction",
+                    style = LaTheme.typography.sectionTitle,
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "vs ${directionResult.previousPeriodLabel}",
+                    style = LaTheme.typography.label,
+                    color = colors.textSecondary
+                )
+            }
+            LaOverallVerdictBadge(verdict = directionResult.overallVerdict)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Window selector tabs/chips (Day, Week, Month, Year)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            com.lifeanalytics.app.domain.growth.GrowthWindow.values().forEach { win ->
+                val isSelected = win == selectedWindow
+                val bg = if (isSelected) colors.ink else colors.surfaceVariant
+                val fg = if (isSelected) colors.onInk else colors.textSecondary
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(LaTheme.radii.shapeFull)
+                        .background(bg)
+                        .pressScaleClickable(onClick = { onSelectWindow(win) })
+                        .padding(vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = win.displayName,
+                        style = LaTheme.typography.label.copy(
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        color = fg,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Locked state or Pillars list
+        when (val lock = directionResult.lockStatus) {
+            is com.lifeanalytics.app.domain.growth.WindowLockStatus.Locked -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(LaTheme.radii.shapeSm)
+                        .background(colors.surfaceVariant)
+                        .padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lock,
+                        contentDescription = "Locked",
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = lock.reason,
+                        style = LaTheme.typography.body,
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = lock.unlockHint,
+                        style = LaTheme.typography.label,
+                        color = colors.textSecondary
+                    )
+                }
+            }
+            com.lifeanalytics.app.domain.growth.WindowLockStatus.Unlocked -> {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LaPillarVerdictRow(pillar = directionResult.habitsPillar)
+                    HorizontalDivider(color = colors.outline.copy(alpha = 0.5f), thickness = 0.5.dp)
+                    LaPillarVerdictRow(pillar = directionResult.tasksPillar)
+                    HorizontalDivider(color = colors.outline.copy(alpha = 0.5f), thickness = 0.5.dp)
+                    LaPillarVerdictRow(pillar = directionResult.financePillar)
+                }
+            }
+        }
+
+        if (onNavigateToInsights != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pressScaleClickable(onClick = onNavigateToInsights),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "View in Insights",
+                    style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LaPillarVerdictRow(
+    pillar: com.lifeanalytics.app.domain.growth.PillarVerdictResult,
+    modifier: Modifier = Modifier
+) {
+    val colors = LaTheme.colors
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = pillar.pillarName,
+                    style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = pillar.currentDisplayValue,
+                    style = LaTheme.typography.label,
+                    color = colors.textSecondary
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = pillar.reason,
+                style = LaTheme.typography.label,
+                color = colors.textSecondary
+            )
+            if (!pillar.supportingText.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(1.dp))
+                Text(
+                    text = pillar.supportingText,
+                    style = LaTheme.typography.chartMicroLabel,
+                    color = colors.onTintSecondary
+                )
+            }
+        }
+
+        if (pillar.verdict != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            LaVerdictChip(verdict = pillar.verdict)
+        }
+    }
+}
+

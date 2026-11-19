@@ -123,6 +123,14 @@ fun LifeAnalyticsApp(
                     },
                     onNavigateToSettings = {
                         navController.navigate("settings")
+                    },
+                    onNavigateToInsights = {
+                        navController.navigate(PrimaryDestination.INSIGHTS.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }
