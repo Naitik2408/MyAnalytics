@@ -544,3 +544,78 @@ metrics must come from shared, testable domain calculations.
     aggregation.
 -   `12_TECHNICAL_ARCHITECTURE.md` --- analytics implementation.
 -   `13_IMPLEMENTATION_TESTING.md` --- calculation and chart tests.
+
+
+---
+
+# Product decisions update — 19 November 2026
+
+This section records the latest decisions made during product planning. Where an older paragraph in this document conflicts with this update, **this update takes precedence for V1**. Existing unrelated module requirements remain in force.
+
+## Confirmed product structure
+
+- Keep the existing **Habits** and **Tasks** as separate tracking systems. Do not replace them with life-area modules.
+- Add an analytics classification layer above existing records.
+- V1 life areas are exactly: **Health & Lifestyle**, **Career & Productivity**, and **Finance & Wealth**. Do not add a fourth life area in V1.
+- When creating or editing a Habit or Task, the user manually selects one life area. Automatic categorisation is explicitly deferred to a future version.
+- Do not require migration or backfilling of old records for V1 analytics. New records can be classified going forward. Preserve existing records and existing tracking workflows.
+- Personal development activities (for example English-speaking practice and reading for learning) belong under Career & Productivity for V1.
+
+## Metric catalogue and scoring rules
+
+### Health & Lifestyle
+
+- **Scheduled health-habit adherence:** completed scheduled health habits divided by scheduled health habits for the selected period, multiplied by 100. Examples include hydration, meditation, exercise, and other user-defined health habits.
+- **Sleep duration / consistency:** optional supporting metric only when the user records sleep data. Do not infer sleep from unrelated activity.
+- **Physical activity:** represented by manually categorised exercise/activity habits in V1; do not require a separate duplicate activity log.
+- **Mental well-being / recovery:** optional user-entered reflection or habit data. Do not make psychological or medical claims.
+
+### Career & Productivity
+
+- **Task completion rate:** completed planned tasks divided by all tasks planned for the selected period, multiplied by 100. Show the numerator and denominator. In V1 each task has equal weight unless a priority/weighting feature is separately approved.
+- **Career-habit adherence:** completed scheduled habits categorised as Career & Productivity divided by scheduled career habits, multiplied by 100. Examples include English-speaking practice, reading for learning, and skill practice.
+- **Focus time:** show recorded focus duration as a supporting activity metric, not proof of productivity, attention, or quality of work.
+
+### Finance & Wealth
+
+- **Income:** sum of recorded income transactions for the selected period.
+- **Expenses:** sum of recorded expense transactions for the selected period.
+- **Net cash flow for period:** income minus expenses; this is not an account balance.
+- **Savings amount and savings rate:** savings amount is income minus expenses; savings rate is (income minus expenses) divided by income, multiplied by 100, only when income is greater than zero.
+- **Budget adherence:** compare actual expenses with a user-defined budget only when a budget exists. Lower spending is not automatically better if it conflicts with the user's goals or essential needs.
+
+## Score calculation policy
+
+- Keep **Habit adherence**, **Task completion**, **Finance metrics**, **category performance**, and **overall life performance** distinguishable. Do not add raw task counts directly to habit percentages.
+- Health category score is based primarily on scheduled Health & Lifestyle habit adherence. Optional sleep/activity metrics may be added only when actual data exists and their weights are explicitly configured.
+- Career category score combines Career & Productivity habit adherence and task completion rate. V1 starting weights: 40% career-habit adherence and 60% task completion rate. If one component has no eligible data, calculate from the available component and label the score as partial; do not silently treat missing data as zero.
+- Finance category score must be goal/budget-aware. V1 may show financial metrics without a numeric Finance score until a valid budget or savings goal provides a fair target. Never reward simply spending less or having higher income without context.
+- Overall Life Score is the equal-weight average of category scores that have sufficient eligible data. Show **data coverage** (for example, 2 of 3 categories available). Never substitute zero for missing or untracked data. If no category has sufficient data, show “Not enough data yet”.
+- Scores are descriptive personal tracking indicators, not scientifically validated measures of life quality, health, mental health, or success. No universal therapist/psychologist formula is claimed.
+- Distinguish **performance** (score for the selected period), **change** (point difference versus an equivalent previous period), and **consistency** (repeated adherence over time). A higher score is not automatically proof of long-term growth.
+
+## Home dashboard and visualisation decisions
+
+The Home screen balances two purposes equally: (1) overall life performance and growth trends, and (2) today's execution. Its key sections are:
+
+1. Overall Life Score with data coverage and comparison to the previous equivalent period.
+2. Health, Career, and Finance category breakdowns, with unavailable/insufficient-data states clearly labelled.
+3. Performance-over-time line chart with Daily, Weekly, Monthly, and longer-range views where data density permits.
+4. A 365-day year view: one dot/cell per calendar day, with elapsed days visually distinct from future days. For elapsed days with a valid score, color intensity represents performance. Future days remain neutral/unfilled. Days with no score use a distinct missing-data style, never the lowest-performance color. Leap years use 366 days.
+5. Daily execution summary: today's habits and tasks, including completed/total counts.
+6. Selecting a calendar day opens that date's score, category breakdown, and source activity.
+
+The line chart and calendar must use saved records only. Do not render illustrative/sample values in production. The calendar communicates both time awareness (days elapsed) and recorded performance; these are separate visual meanings.
+
+## UI/UX reference
+
+Use the latest revised `03_UI_UX_GUIDELINES.md` as the single source of truth: light-mode-first, lavender-led pastel identity, clean readable typography, rounded soft surfaces, structured information density, restrained mint/blue/warm-neutral supporting colors, and clear chart encodings. Do not revive earlier unrelated dark-dashboard or finance-app visual directions.
+
+## V1 and future boundary
+
+- V1: manual life-area selection on Habit/Task create/edit; transparent rule-based calculations; honest missing-data states; dashboard graph and 365-day view.
+- Future: automatic categorisation suggestions with manual correction, advanced priority-weighted task scoring, predictive/AI insights, and additional life areas. These are not V1 requirements.
+- Existing tracking data is not required to be migrated. No destructive schema or workflow change is permitted merely to enable analytics.
+
+### V1 life analytics model
+Use the three life areas and score policy in the product decision update. Provide Daily, Weekly, Monthly, and Yearly/365-day views as appropriate. For comparisons, compare equivalent periods (e.g. Monday–Sunday against the previous Monday–Sunday). Expose performance, change, and consistency as separate concepts.

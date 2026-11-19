@@ -2,7 +2,7 @@
 
 **Document:** `12_TECHNICAL_ARCHITECTURE.md`\
 **Product:** Life Analytics\
-**Version:** 1.1 (V1 — backup and restore update)\
+**Version:** 1.0 (V1)\
 **Status:** Implementation architecture specification\
 **Target:** Android-only, single-user, local-first application\
 **Development environment:** Antigravity Remote\
@@ -48,7 +48,8 @@ physical device. Real-device verification remains part of acceptance.
 6.  Clear separation between UI, domain rules, and data access.
 7.  One source of truth for every business record and calculation.
 8.  Minimal dependencies; avoid libraries without a concrete V1 need.
-9.  No mandatory backend or account for ordinary offline app use. A separately consented backup destination is required for uninstall-safe recovery; do not add cloud sync.
+9.  No mandatory backend, account, cloud service, or network permission
+    in V1.
 10. Ask for Android permissions only when a user invokes a feature that
     needs them.
 11. Handle denied permissions and restricted device states without
@@ -56,7 +57,7 @@ physical device. Real-device verification remains part of acceptance.
 12. Build and test from the remote environment throughout development.
 13. Never claim a feature or build works without evidence from a
     successful build/test.
-14. Preserve user data through app restarts, APK upgrades, schema migrations, and verified backup/restore across uninstall/reinstall.
+14. Preserve user data through app restarts and schema migrations.
 
 ## 3. Chosen technology stack
 
@@ -354,29 +355,6 @@ Use Room with SQLite, following `11_DATA_ARCHITECTURE.md`.
 -   Preserve existing user data during upgrades.
 -   Test migrations using representative prior database versions.
 -   Provide a clear recovery path if database access fails.
-
-### 7.4 Uninstall-safe backup and restore (required)
-
-**Goal:** A user can uninstall Life Analytics, reinstall it later, and recover the records included in the last successfully completed backup. App-private Room data alone cannot provide this guarantee.
-
-Architecture rules:
-
-1. Room/SQLite remains the authoritative live database. Backup is a separate, portable snapshot, not a second live source of truth.
-2. The backup destination must be outside the app-private sandbox. Support a user-selected document/provider destination through Android's Storage Access Framework where feasible. A cloud provider such as Google Drive may be used only after its provider integration, authentication, permissions, upload, download, and restore flow are verified. Do not assume the user's separate APK-upload folder is accessible to the app.
-3. Do not rely solely on Android Auto Backup or device-transfer backup for the uninstall-recovery guarantee. It may be an additional layer, with exact backup rules and restore limitations documented.
-4. Before implementing a provider, inspect the existing project, database schema, app ID, current backup configuration, dependencies, and available Android APIs. Report the proposed destination/provider and any user action/credential/consent genuinely required. Do not invent credentials or silently connect an account.
-5. Create a consistent snapshot. Prefer a Room/SQLite-safe export or transactionally consistent backup; do not copy a live database file while writes are in progress without a supported consistency mechanism. Handle WAL/sidecar state only through a supported database backup mechanism.
-6. Use a versioned archive with a manifest: backup-format version, creation timestamp, app version, database schema version, included datasets, and record counts. Include required preferences. Exclude secrets, logs, APKs, and unrelated files.
-7. Encrypt backup contents with authenticated encryption (for example AES-GCM) and use a key-recovery design that survives uninstall. Do not depend only on an Android Keystore key that may be removed on uninstall. If using a user-held recovery password, derive the key with a reviewed password-based KDF and unique random salt; explain that losing the password can make the backup unrecoverable. Never log or upload the password/key. Do not implement custom cryptography.
-8. Verify a completed backup by reading it back and validating authentication/integrity, manifest, format/schema version, and record counts. Report success only after verification. Preserve the previous known-good backup until a replacement is verified.
-9. Restore must validate the backup before changing live data, show its date/version/record counts, and require explicit confirmation. Create a safety copy of current data before replacement. Restore atomically where feasible; if any step fails, retain the pre-restore database and report failure. Define duplicate/merge behaviour; never silently merge or overwrite.
-10. Provide clear backup status: last successful backup time, destination, result, and actionable failure state. A pending/failed backup must never be labelled successful.
-11. Automatic background backup is a later increment after manual backup/restore is proven. Use WorkManager only for deferrable work, respect network/battery constraints, and never promise an exact execution time. Keep manual backup and restore available.
-12. Cloud sync, multi-device concurrent editing, and a mandatory online account are explicitly out of scope for this change.
-
-**Implementation order:** (a) audit the current app and protect the existing database with a verified pre-change backup; (b) implement and test manual encrypted backup and restore to an external destination; (c) verify uninstall/reinstall recovery on the physical phone; (d) only then add scheduled cloud backup if the selected provider supports it reliably.
-
-**Critical safety rule:** Never uninstall the current app, clear its storage, reset Room, use destructive migration fallbacks, or replace the current database during development/testing until a backup has been created outside app-private storage and its restore has been verified.
 
 ## 8. Focus timer and Android lifecycle
 
@@ -798,10 +776,9 @@ test reports the result.
 -   Do not log personal reflection text, task titles, or finance
     amounts.
 -   Keep signing secrets out of source control.
--   Do not transmit personal data to a backup destination without explicit user consent and a clearly identified destination.
--   Encrypt portable backups with authenticated encryption and document recovery-key handling.
--   Never log backup passwords, encryption keys, reflection text, task titles, or finance details.
--   Document Android Auto Backup separately; it is not the sole uninstall-recovery mechanism.
+-   Avoid exporting personal data automatically.
+-   If backup is enabled, document what Android backs up and how the
+    user can control it.
 -   Data deletion behaviour must be explicit and tested.
 -   Do not claim encryption at rest unless an actual encryption design
     is implemented and verified.
@@ -835,9 +812,6 @@ test reports the result.
 -   [ ] Focus duration is based on persisted valid intervals.
 -   [ ] Process death does not invent focus time.
 -   [ ] Database migrations preserve existing data.
--   [ ] Backup is stored outside app-private storage, integrity-verified, and encrypted.
--   [ ] Restore is validated, confirmed by the user, and failure-safe.
--   [ ] Uninstall/reinstall recovery has been tested on a real device using the external backup.
 
 ### Permissions and errors
 
@@ -878,8 +852,7 @@ Remote capabilities:
 6.  Supported artifact export/download mechanism from Antigravity
     Remote.
 7.  Release signing and secure key retention mechanism.
-8.  Which external backup destination/provider is supported and verified, including authentication and recovery-key UX.
-9.  Whether Android Auto Backup is enabled as an additional convenience and its exact data scope.
+8.  Whether Android backup is enabled and its exact data scope.
 9.  Whether reminders are included in V1; default recommendation remains
     deferred.
 10. Whether a foreground service is truly required for any approved
@@ -906,3 +879,78 @@ before locking environment-specific values.
     truth.
 -   `13_IMPLEMENTATION_TESTING.md` --- build, test, permission, device,
     and release verification plan.
+
+
+---
+
+# Product decisions update — 19 November 2026
+
+This section records the latest decisions made during product planning. Where an older paragraph in this document conflicts with this update, **this update takes precedence for V1**. Existing unrelated module requirements remain in force.
+
+## Confirmed product structure
+
+- Keep the existing **Habits** and **Tasks** as separate tracking systems. Do not replace them with life-area modules.
+- Add an analytics classification layer above existing records.
+- V1 life areas are exactly: **Health & Lifestyle**, **Career & Productivity**, and **Finance & Wealth**. Do not add a fourth life area in V1.
+- When creating or editing a Habit or Task, the user manually selects one life area. Automatic categorisation is explicitly deferred to a future version.
+- Do not require migration or backfilling of old records for V1 analytics. New records can be classified going forward. Preserve existing records and existing tracking workflows.
+- Personal development activities (for example English-speaking practice and reading for learning) belong under Career & Productivity for V1.
+
+## Metric catalogue and scoring rules
+
+### Health & Lifestyle
+
+- **Scheduled health-habit adherence:** completed scheduled health habits divided by scheduled health habits for the selected period, multiplied by 100. Examples include hydration, meditation, exercise, and other user-defined health habits.
+- **Sleep duration / consistency:** optional supporting metric only when the user records sleep data. Do not infer sleep from unrelated activity.
+- **Physical activity:** represented by manually categorised exercise/activity habits in V1; do not require a separate duplicate activity log.
+- **Mental well-being / recovery:** optional user-entered reflection or habit data. Do not make psychological or medical claims.
+
+### Career & Productivity
+
+- **Task completion rate:** completed planned tasks divided by all tasks planned for the selected period, multiplied by 100. Show the numerator and denominator. In V1 each task has equal weight unless a priority/weighting feature is separately approved.
+- **Career-habit adherence:** completed scheduled habits categorised as Career & Productivity divided by scheduled career habits, multiplied by 100. Examples include English-speaking practice, reading for learning, and skill practice.
+- **Focus time:** show recorded focus duration as a supporting activity metric, not proof of productivity, attention, or quality of work.
+
+### Finance & Wealth
+
+- **Income:** sum of recorded income transactions for the selected period.
+- **Expenses:** sum of recorded expense transactions for the selected period.
+- **Net cash flow for period:** income minus expenses; this is not an account balance.
+- **Savings amount and savings rate:** savings amount is income minus expenses; savings rate is (income minus expenses) divided by income, multiplied by 100, only when income is greater than zero.
+- **Budget adherence:** compare actual expenses with a user-defined budget only when a budget exists. Lower spending is not automatically better if it conflicts with the user's goals or essential needs.
+
+## Score calculation policy
+
+- Keep **Habit adherence**, **Task completion**, **Finance metrics**, **category performance**, and **overall life performance** distinguishable. Do not add raw task counts directly to habit percentages.
+- Health category score is based primarily on scheduled Health & Lifestyle habit adherence. Optional sleep/activity metrics may be added only when actual data exists and their weights are explicitly configured.
+- Career category score combines Career & Productivity habit adherence and task completion rate. V1 starting weights: 40% career-habit adherence and 60% task completion rate. If one component has no eligible data, calculate from the available component and label the score as partial; do not silently treat missing data as zero.
+- Finance category score must be goal/budget-aware. V1 may show financial metrics without a numeric Finance score until a valid budget or savings goal provides a fair target. Never reward simply spending less or having higher income without context.
+- Overall Life Score is the equal-weight average of category scores that have sufficient eligible data. Show **data coverage** (for example, 2 of 3 categories available). Never substitute zero for missing or untracked data. If no category has sufficient data, show “Not enough data yet”.
+- Scores are descriptive personal tracking indicators, not scientifically validated measures of life quality, health, mental health, or success. No universal therapist/psychologist formula is claimed.
+- Distinguish **performance** (score for the selected period), **change** (point difference versus an equivalent previous period), and **consistency** (repeated adherence over time). A higher score is not automatically proof of long-term growth.
+
+## Home dashboard and visualisation decisions
+
+The Home screen balances two purposes equally: (1) overall life performance and growth trends, and (2) today's execution. Its key sections are:
+
+1. Overall Life Score with data coverage and comparison to the previous equivalent period.
+2. Health, Career, and Finance category breakdowns, with unavailable/insufficient-data states clearly labelled.
+3. Performance-over-time line chart with Daily, Weekly, Monthly, and longer-range views where data density permits.
+4. A 365-day year view: one dot/cell per calendar day, with elapsed days visually distinct from future days. For elapsed days with a valid score, color intensity represents performance. Future days remain neutral/unfilled. Days with no score use a distinct missing-data style, never the lowest-performance color. Leap years use 366 days.
+5. Daily execution summary: today's habits and tasks, including completed/total counts.
+6. Selecting a calendar day opens that date's score, category breakdown, and source activity.
+
+The line chart and calendar must use saved records only. Do not render illustrative/sample values in production. The calendar communicates both time awareness (days elapsed) and recorded performance; these are separate visual meanings.
+
+## UI/UX reference
+
+Use the latest revised `03_UI_UX_GUIDELINES.md` as the single source of truth: light-mode-first, lavender-led pastel identity, clean readable typography, rounded soft surfaces, structured information density, restrained mint/blue/warm-neutral supporting colors, and clear chart encodings. Do not revive earlier unrelated dark-dashboard or finance-app visual directions.
+
+## V1 and future boundary
+
+- V1: manual life-area selection on Habit/Task create/edit; transparent rule-based calculations; honest missing-data states; dashboard graph and 365-day view.
+- Future: automatic categorisation suggestions with manual correction, advanced priority-weighted task scoring, predictive/AI insights, and additional life areas. These are not V1 requirements.
+- Existing tracking data is not required to be migrated. No destructive schema or workflow change is permitted merely to enable analytics.
+
+### Analytics implementation constraints
+Implement calculations in a testable domain/service layer, not inside UI composables. Derive aggregates from authoritative task, habit schedule/completion, focus-session, and finance transaction records. Use local calendar dates and the configured timezone consistently. Cache only rebuildable aggregates. Missing data must remain distinct from zero.
