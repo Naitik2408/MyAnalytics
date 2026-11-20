@@ -297,27 +297,77 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 2. 365-Day Performance Heatmap (Immediately after Date/Calendar section)
+            // 2. 365-Day Performance Heatmap with Days Passed / Days Remaining Header
             item {
+                val yearProgress = remember(today) { DateAttributionPolicy.yearProgress(today) }
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
-                    val yearSub = buildString {
-                        append("${yearCalendarModel.scoredDaysCount} scored • ")
-                        append("${yearCalendarModel.elapsedDaysWithoutScoreCount} no data")
-                        yearCalendarModel.averageYearScore?.let { avg ->
-                            append(" • Avg $avg/100")
-                        }
-                    }
-                    LaContainerPanel(
-                        title = "${yearCalendarModel.year} performance",
-                        subtitle = yearSub
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(LaTheme.radii.shapeLg)
+                            .background(colors.surface)
+                            .padding(spacing.space5)
                     ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = yearProgress.daysPassed.toString(),
+                                    style = LaTheme.typography.metricValue.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Days Passed",
+                                    style = LaTheme.typography.label,
+                                    color = colors.textSecondary
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(38.dp)
+                                    .background(colors.outline.copy(alpha = 0.7f))
+                            )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = yearProgress.daysRemaining.toString(),
+                                    style = LaTheme.typography.metricValue.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.accent
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Days Remaining",
+                                    style = LaTheme.typography.label,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        LaRowDivider()
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         LaYear365Calendar(
                             calendar = yearCalendarModel,
                             selectedDate = drilldownDateEpoch?.let { LocalDate.ofEpochDay(it) },
                             onSelectDay = { cell ->
                                 drilldownDateEpoch = cell.date.toEpochDay()
                             },
-                            tint = colors.tints.lavender
+                            tint = colors.tints.lavender,
+                            showSummaryHeader = false
                         )
                     }
                 }

@@ -143,4 +143,30 @@ object DateAttributionPolicy {
     fun formatMinutes(totalMinutes: Int): String = formatSummaryMinutes(totalMinutes)
 
     fun isoWeekRange(anchorDate: LocalDate): Pair<LocalDate, LocalDate> = weekRangeForDate(anchorDate)
+
+    /**
+     * Dynamically calculates year progress for [date] using local calendar rules.
+     * - [daysPassed]: 1-based day number within the year, counting [date] itself (Jan 1 = 1).
+     * - [totalDaysInYear]: 365 for normal years, 366 for leap years.
+     * - [daysRemaining]: [totalDaysInYear] - [daysPassed] (0 on Dec 31).
+     */
+    fun yearProgress(date: LocalDate): YearProgress {
+        val total = date.lengthOfYear()
+        val passed = date.dayOfYear.coerceIn(1, total)
+        val remaining = (total - passed).coerceAtLeast(0)
+        return YearProgress(
+            year = date.year,
+            daysPassed = passed,
+            daysRemaining = remaining,
+            totalDaysInYear = total
+        )
+    }
 }
+
+data class YearProgress(
+    val year: Int,
+    val daysPassed: Int,
+    val daysRemaining: Int,
+    val totalDaysInYear: Int
+)
+

@@ -767,7 +767,7 @@ private fun TransactionListRow(
         modifier = Modifier
             .fillMaxWidth()
             .pressScaleClickable(onClick = onEdit)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -787,65 +787,84 @@ private fun TransactionListRow(
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = transaction.category,
                     style = LaTheme.typography.body.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.textPrimary,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                Box(
-                    modifier = Modifier
-                        .clip(LaTheme.radii.shapeFull)
-                        .background(colors.surfaceVariant)
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "$signPrefix${MoneyUtils.formatMinorUnits(transaction.amountMinor, transaction.currencyCode)}",
+                    style = LaTheme.typography.sectionTitle.copy(fontWeight = FontWeight.Bold),
+                    color = semanticColor,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val dateStr = DateAttributionPolicy.formatShortDate(transaction.transactionDate)
+                val subtitle = if (!transaction.note.isNullOrBlank()) {
+                    "$dateStr · ${transaction.note}"
+                } else {
+                    "$dateStr · $typeLabel"
+                }
+                Text(
+                    text = subtitle,
+                    style = LaTheme.typography.label,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = typeLabel,
-                        style = LaTheme.typography.chartMicroLabel,
-                        color = colors.textSecondary
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(colors.surfaceVariant)
+                            .pressScaleClickable(onClick = onEdit),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit transaction",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(colors.surfaceVariant)
+                            .pressScaleClickable(onClick = onDelete),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DeleteOutline,
+                            contentDescription = "Delete transaction",
+                            tint = colors.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(2.dp))
-            val dateStr = DateAttributionPolicy.formatShortDate(transaction.transactionDate)
-            val subtitle = if (!transaction.note.isNullOrBlank()) {
-                "$dateStr • ${transaction.note}"
-            } else {
-                dateStr
-            }
-            Text(
-                text = subtitle,
-                style = LaTheme.typography.label,
-                color = colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "$signPrefix${MoneyUtils.formatMinorUnits(transaction.amountMinor, transaction.currencyCode)}",
-            style = LaTheme.typography.sectionTitle.copy(fontWeight = FontWeight.Bold),
-            color = semanticColor
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        LaCircularIconButton(
-            icon = Icons.Outlined.Edit,
-            contentDescription = "Edit transaction",
-            onClick = onEdit,
-            size = 44.dp
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        LaCircularIconButton(
-            icon = Icons.Outlined.DeleteOutline,
-            contentDescription = "Delete transaction",
-            onClick = onDelete,
-            contentColor = colors.error,
-            size = 44.dp
-        )
     }
 }
 

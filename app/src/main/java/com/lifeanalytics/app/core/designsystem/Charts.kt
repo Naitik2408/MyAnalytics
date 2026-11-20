@@ -1098,7 +1098,8 @@ fun LaYear365Calendar(
     selectedDate: java.time.LocalDate?,
     onSelectDay: (com.lifeanalytics.app.domain.analytics.YearDayCellModel) -> Unit,
     modifier: Modifier = Modifier,
-    tint: TintSteps = LaTheme.colors.tints.lavender
+    tint: TintSteps = LaTheme.colors.tints.lavender,
+    showSummaryHeader: Boolean = true
 ) {
     val colors = LaTheme.colors
     val columns = 20
@@ -1112,22 +1113,24 @@ fun LaYear365Calendar(
             },
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Summary strip: Elapsed vs Remaining + Scored days
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${calendar.elapsedDaysCount} / ${calendar.totalDaysInYear} days elapsed",
-                style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
-                color = colors.textPrimary
-            )
-            Text(
-                text = "${calendar.scoredDaysCount} scored day(s)",
-                style = LaTheme.typography.chartMicroLabel,
-                color = colors.textSecondary
-            )
+        if (showSummaryHeader) {
+            // Summary strip: Elapsed vs Remaining + Scored days
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${calendar.elapsedDaysCount} / ${calendar.totalDaysInYear} days elapsed",
+                    style = LaTheme.typography.label.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = "${calendar.scoredDaysCount} scored day(s)",
+                    style = LaTheme.typography.chartMicroLabel,
+                    color = colors.textSecondary
+                )
+            }
         }
 
         // Interactive Canvas Grid for 365/366 days
