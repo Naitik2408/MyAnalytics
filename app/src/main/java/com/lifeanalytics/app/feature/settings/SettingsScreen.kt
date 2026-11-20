@@ -578,14 +578,14 @@ fun SettingsScreen(
             }
         }
 
-        // Isolated Demo / Sample Dataset (October 2026) Panel
+        // Isolated Historical Sample Dataset (June 1 – November 18, 2026) Panel
         item {
             var demoStatusText by remember { mutableStateOf<String?>(null) }
             var isSeedBusy by remember { mutableStateOf(false) }
 
             LaContainerPanel(
-                title = "Demo Sample Dataset (October 2026)",
-                subtitle = "Load 1 month of realistic, isolated sample data (Oct 1–31, 2026) tagged with [Demo] to preview the 365-day heatmap, category scores, and trend charts without overwriting personal records."
+                title = "Historical Sample Data (Jun 1 – Nov 18, 2026)",
+                subtitle = "Generates isolated historical completions for your existing habits (no fake habits created), sample tasks, and varied finance records across Jun 1 – Nov 18, 2026. Personal records are never modified."
             ) {
                 if (demoStatusText != null) {
                     Box(
@@ -609,23 +609,18 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.spacedBy(spacing.space2)
                 ) {
                     LaPrimaryButton(
-                        text = "Load Oct 2026 Demo",
+                        text = "Rebuild Sample Data",
                         enabled = !isSeedBusy,
                         onClick = {
                             isSeedBusy = true
                             scope.launch {
-                                repository.seedDemoSampleMonth(preferences.currencyCode)
+                                repository.rebuildHistoricalSampleData(preferences.currencyCode)
                                     .onSuccess { summary ->
-                                        if (preferences.monthlyBudgetMinor == null || preferences.monthlyBudgetMinor == 0L) {
-                                            preferencesRepository.setMonthlyBudgetMinor(
-                                                com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR
-                                            )
-                                        }
-                                        preferencesRepository.setAutoSeededOct2026Demo(true)
-                                        demoStatusText = "Loaded ${summary.monthLabel}: ${summary.habitsSeeded} habits, ${summary.habitCompletionsSeeded} completions, ${summary.tasksSeeded} tasks, ${summary.transactionsSeeded} finance entries."
+                                        preferencesRepository.setSampleHistoryEnabled(true)
+                                        demoStatusText = "Built ${summary.rangeLabel}: ${summary.existingHabitsUsed} existing habit(s), ${summary.habitCompletionsSeeded} completions, ${summary.tasksSeeded} sample tasks, ${summary.transactionsSeeded} finance entries."
                                     }
                                     .onFailure { err ->
-                                        demoStatusText = "Could not load sample data: ${err.message}"
+                                        demoStatusText = "Could not build sample data: ${err.message}"
                                     }
                                 isSeedBusy = false
                             }
@@ -634,18 +629,19 @@ fun SettingsScreen(
                     )
 
                     LaSecondaryButton(
-                        text = "Remove Demo Data",
+                        text = "Remove Sample Data",
                         enabled = !isSeedBusy,
                         onClick = {
                             isSeedBusy = true
                             scope.launch {
-                                repository.removeDemoSampleMonth()
+                                repository.removeLegacyOctoberDemoData()
+                                repository.removeHistoricalSampleData()
                                     .onSuccess {
-                                        preferencesRepository.setAutoSeededOct2026Demo(true)
-                                        demoStatusText = "Removed all [Demo] records. Personal records were preserved."
+                                        preferencesRepository.setSampleHistoryEnabled(false)
+                                        demoStatusText = "Removed all sample records. Personal habits, tasks, and transactions were preserved."
                                     }
                                     .onFailure { err ->
-                                        demoStatusText = "Could not remove demo data: ${err.message}"
+                                        demoStatusText = "Could not remove sample data: ${err.message}"
                                     }
                                 isSeedBusy = false
                             }

@@ -1,7 +1,6 @@
 package com.lifeanalytics.app.feature.career
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,16 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.WorkOutline
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -39,9 +35,12 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
+import com.lifeanalytics.app.core.designsystem.LaActionPillGroup
+import com.lifeanalytics.app.core.designsystem.LaActionSpec
 import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
+import com.lifeanalytics.app.core.designsystem.LaCategoryPeriodSelector
+import com.lifeanalytics.app.core.designsystem.LaCompletionCountTile
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
-import com.lifeanalytics.app.core.designsystem.LaHeroPanel
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
 import com.lifeanalytics.app.core.designsystem.LaTheme
@@ -54,6 +53,7 @@ import com.lifeanalytics.app.domain.model.LifeArea
 import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import com.lifeanalytics.app.feature.habits.HabitFormDialog
 import com.lifeanalytics.app.feature.planning.TaskFormDialog
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,6 +64,10 @@ fun CareerScreen(
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var periodWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.MONTHLY) }
+    var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    val anchorDate = LocalDate.ofEpochDay(anchorDateEpoch)
 
     val allTasks by repository.observeAllTasks().collectAsState(initial = emptyList())
     val todayTasks by remember(today) {
@@ -90,10 +94,12 @@ fun CareerScreen(
     val allCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
     val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
 
-    val careerPerformance = remember(today, allHabits, allCompletions, allTasks, allTransactions) {
+    val careerPerformance = remember(
+        periodWindow, anchorDate, today, allHabits, allCompletions, allTasks, allTransactions
+    ) {
         LifeAnalyticsEngine.evaluatePeriodPerformance(
-            window = AnalyticsTimeWindow.MONTHLY,
-            anchorDate = today,
+            window = periodWindow,
+            anchorDate = anchorDate,
             today = today,
             habits = allHabits,
             completions = allCompletions,
@@ -133,6 +139,16 @@ fun CareerScreen(
                 )
             }
 
+            item {
+                LaCategoryPeriodSelector(
+                    window = periodWindow,
+                    anchorDate = anchorDate,
+                    today = today,
+                    onWindowChange = { periodWindow = it },
+                    onAnchorChange = { anchorDateEpoch = it.toEpochDay() }
+                )
+            }
+
             if (errorMessage != null) {
                 item {
                     ErrorBanner(
@@ -142,68 +158,39 @@ fun CareerScreen(
                 }
             }
 
-            // Career Score Hero Panel
-            item {
-                LaHeroPanel(
-                    title = "Career Performance",
-                    subtitle = "60% Tasks · 40% Learning Habits",
-                    icon = Icons.Outlined.WorkOutline,
-                    containerColor = colors.tints.lavender.strong
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            val scoreDisplay = careerPerformance.score?.let { "$it / 100" } ?: "No data"
-                            Text(
-                                text = scoreDisplay,
-                                style = LaTheme.typography.metricValue,
-                                color = colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            val breakdownText = "Tasks: ${careerPerformance.taskCompletionPercent ?: 0}% · Habits: ${careerPerformance.careerHabitAdherencePercent ?: 0}%"
-                            Text(
-                                text = breakdownText,
-                                style = LaTheme.typography.label,
-                                color = colors.onTintSecondary
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "${careerPerformance.completedTasks}/${careerPerformance.totalPlannedTasks} Tasks",
-                                style = LaTheme.typography.label.copy(fontWeight = FontWeight.Bold),
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = "${careerPerformance.completedCareerHabits}/${careerPerformance.totalScheduledCareerHabits} Habits",
-                                style = LaTheme.typography.chartMicroLabel,
-                                color = colors.onTintSecondary
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Quick Action Buttons
+            // Paired Summary Cards: Career Tasks & Career Habits (same template as Health Page)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(spacing.tileGutter)
                 ) {
-                    CareerActionButton(
-                        label = "Add task",
-                        onClick = { showAddTaskDialog = true },
+                    LaCompletionCountTile(
+                        label = "Career Tasks",
+                        completed = careerPerformance.completedTasks,
+                        total = careerPerformance.totalPlannedTasks,
+                        icon = Icons.Outlined.TaskAlt,
+                        containerColor = colors.tints.blue.base,
                         modifier = Modifier.weight(1f)
                     )
-                    CareerActionButton(
-                        label = "Add habit",
-                        onClick = { showAddHabitDialog = true },
+                    LaCompletionCountTile(
+                        label = "Career Habits",
+                        completed = careerPerformance.completedCareerHabits,
+                        total = careerPerformance.totalScheduledCareerHabits,
+                        icon = Icons.Outlined.Repeat,
+                        containerColor = colors.tints.butter.base,
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
+
+            // Quick Action Buttons (matching Home & Health button dimensions)
+            item {
+                LaActionPillGroup(
+                    secondary = listOf(
+                        LaActionSpec("Add habit", { showAddHabitDialog = true }),
+                        LaActionSpec("Add task", { showAddTaskDialog = true })
+                    )
+                )
             }
 
             // Today's Career Tasks
@@ -278,31 +265,30 @@ fun CareerScreen(
                 }
             }
 
-            // Learning & Career Habits (Skill-building, Reading, English speaking)
+            // Today's Learning & Career Habits (Skill-building, Reading, English speaking)
             item {
                 LaContainerPanel(
                     title = "Learning & productivity habits",
                     subtitle = "${todayHabitSummary.completedDueCount} of ${todayHabitSummary.totalDueCount} completed today"
                 ) {
-                    if (careerHabits.isEmpty()) {
+                    if (todayHabitSummary.dueHabits.isEmpty()) {
                         Text(
-                            text = "No learning habits configured yet. Add habits like reading, English speaking, or coding practice.",
+                            text = "No learning habits scheduled for today. Add habits like reading, English speaking, or coding practice.",
                             style = LaTheme.typography.body,
                             color = colors.textSecondary,
                             modifier = Modifier.padding(vertical = 8.dp)
                         )
                     } else {
-                        careerHabits.forEachIndexed { index, habit ->
-                            val isCompletedToday = todayCompletions.any { it.habitId == habit.id && it.isCompleted }
+                        todayHabitSummary.dueHabits.forEachIndexed { index, item ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .pressScaleClickable {
                                         scope.launch {
                                             repository.setHabitCompletionForDate(
-                                                habitId = habit.id,
+                                                habitId = item.habit.id,
                                                 date = today,
-                                                completed = !isCompletedToday
+                                                completed = !item.isCompleted
                                             ).onFailure { errorMessage = it.message }
                                         }
                                     }
@@ -310,11 +296,11 @@ fun CareerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 LaAnimatedCheckbox(
-                                    checked = isCompletedToday,
+                                    checked = item.isCompleted,
                                     onCheckedChange = { checked ->
                                         scope.launch {
                                             repository.setHabitCompletionForDate(
-                                                habitId = habit.id,
+                                                habitId = item.habit.id,
                                                 date = today,
                                                 completed = checked
                                             ).onFailure { errorMessage = it.message }
@@ -324,16 +310,16 @@ fun CareerScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = habit.name,
+                                        text = item.habit.name,
                                         style = LaTheme.typography.body.copy(
                                             fontWeight = FontWeight.Medium,
-                                            textDecoration = if (isCompletedToday) TextDecoration.LineThrough else TextDecoration.None
+                                            textDecoration = if (item.isCompleted) TextDecoration.LineThrough else TextDecoration.None
                                         ),
-                                        color = if (isCompletedToday) colors.textSecondary else colors.textPrimary,
+                                        color = if (item.isCompleted) colors.textSecondary else colors.textPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    val scheduleDesc = habit.effectiveScheduleOn(today)?.scheduleType?.name ?: "Scheduled"
+                                    val scheduleDesc = item.schedulePeriod?.scheduleType?.displayName ?: "Scheduled"
                                     Text(
                                         text = scheduleDesc,
                                         style = LaTheme.typography.chartMicroLabel,
@@ -353,7 +339,7 @@ fun CareerScreen(
                                     )
                                 }
                             }
-                            if (index < careerHabits.lastIndex) {
+                            if (index < todayHabitSummary.dueHabits.lastIndex) {
                                 LaRowDivider()
                             }
                         }
@@ -386,6 +372,7 @@ fun CareerScreen(
                 )
                 if (result.isSuccess) {
                     showAddTaskDialog = false
+                    scope.launch { snackbarHostState.showSnackbar("Task saved") }
                 }
                 result.map { }
             }
@@ -406,43 +393,12 @@ fun CareerScreen(
                         lifeArea = area
                     ).onSuccess {
                         showAddHabitDialog = false
+                        snackbarHostState.showSnackbar("Habit saved")
                     }.onFailure { errorMessage = it.message }
                 }
             },
             onDeactivate = null,
             onRequestDelete = null
-        )
-    }
-}
-
-@Composable
-private fun CareerActionButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colors = LaTheme.colors
-    Row(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(colors.surface)
-            .border(1.dp, colors.outline.copy(alpha = 0.5f), CircleShape)
-            .pressScaleClickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 16.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Add,
-            contentDescription = null,
-            tint = colors.accent,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = LaTheme.typography.buttonLabel.copy(fontWeight = FontWeight.SemiBold),
-            color = colors.textPrimary
         )
     }
 }

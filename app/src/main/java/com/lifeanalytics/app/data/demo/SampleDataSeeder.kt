@@ -9,6 +9,7 @@ import com.lifeanalytics.app.data.local.entity.HabitCompletionEntity
 import com.lifeanalytics.app.data.local.entity.HabitEntity
 import com.lifeanalytics.app.data.local.entity.HabitSchedulePeriodEntity
 import com.lifeanalytics.app.data.local.entity.TaskEntity
+import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.model.LifeArea
 import com.lifeanalytics.app.domain.model.TaskCategory
 import com.lifeanalytics.app.domain.model.TaskStatus
@@ -17,375 +18,405 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import kotlin.math.abs
 
 /**
- * Deterministic, isolated 1-month sample data seeder (`October 1, 2026 – October 31, 2026`
- * or the previous complete calendar month relative to `today`).
+ * Deterministic, isolated historical sample data seeder covering
+ * **June 1, 2026 through November 18, 2026, inclusive**.
  *
- * Isolation & Safety Guarantees:
- * 1. Every record ID is deterministically prefixed with `demo_oct2026_` so it can never
- *    collide with or overwrite real user UUID records.
- * 2. Every habit/task title or transaction note includes `[Demo]` so demo records are
- *    unmistakably identifiable in the UI.
- * 3. Idempotent: Running [seedSampleMonth] multiple times replaces only the deterministic
- *    `demo_oct2026_*` IDs without creating duplicates or touching personal data.
- * 4. Reversible: [removeSampleMonth] deletes only records with the `demo_oct2026_` prefix,
- *    leaving all personal user records untouched.
- * 5. All analytics and the 365-day heatmap are computed through the real `LifeAnalyticsEngine`
- *    over these seeded SQLite records — zero hardcoded scores or UI overrides.
+ * Isolation & Data-Safety Guarantees:
+ * 1. **Zero fake habits**: Never creates new `HabitEntity` rows. Instead, inspects the user's
+ *    existing real habits, respects their schedules/weekdays, and attaches removable
+ *    `demo_hist_` schedule periods (only when a habit started after June 1) and `demo_hist_`
+ *    completions without modifying any real habit or real completion record.
+ * 2. **Strict ID prefix isolation**: Every generated schedule period, completion, task, and
+ *    finance transaction uses [DEMO_ID_PREFIX] (`demo_hist_`). Generated tasks and finance
+ *    notes also include [DEMO_TAG] (`[Sample]`) so they can never be mistaken for personal data.
+ * 3. **Legacy cleanup**: [removeLegacyOctoberDemoData] cleans up any old `demo_oct2026_`
+ *    records (including the old 5 fake `[Demo]` habits) without touching personal records.
+ * 4. **Idempotent & reversible**: Running [rebuildHistoricalSampleData] multiple times replaces
+ *    only `demo_hist_*` rows without duplicating records or touching personal records.
+ *    [removeHistoricalSampleData] removes all `demo_hist_*` rows cleanly.
+ * 5. **Real analytics only**: All dashboards, summary cards, and the 365-day heatmap compute
+ *    directly from these SQLite records through `LifeAnalyticsEngine` and `DomainCalculations`.
  */
 object SampleDataSeeder {
 
-    const val DEMO_ID_PREFIX = "demo_oct2026_"
-    const val DEMO_TAG = "[Demo]"
+    const val DEMO_ID_PREFIX = "demo_hist_"
+    const val LEGACY_OCT2026_PREFIX = "demo_oct2026_"
+    const val DEMO_TAG = "[Sample]"
 
-    // Recommended monthly budget target (₹45,000.00 = 4,500,000 paise) for demo finance scoring
-    const val DEMO_MONTHLY_BUDGET_MINOR = 4_500_000L
+    val SAMPLE_START_DATE: LocalDate = LocalDate.of(2026, 6, 1)
+    val SAMPLE_END_DATE: LocalDate = LocalDate.of(2026, 11, 18)
 
     data class SeedSummary(
-        val monthLabel: String,
-        val habitsSeeded: Int,
+        val rangeLabel: String,
+        val existingHabitsUsed: Int,
         val habitCompletionsSeeded: Int,
         val tasksSeeded: Int,
         val transactionsSeeded: Int
     )
 
-    data class DemoHabitSpec(
-        val id: String,
-        val name: String,
-        val lifeArea: LifeArea,
-        val scheduleType: String,
-        val weekdaysCsv: String,
-        val dueWeekdays: Set<DayOfWeek>
-    )
-
-    val demoHabits: List<DemoHabitSpec> = listOf(
-        DemoHabitSpec(
-            id = "${DEMO_ID_PREFIX}habit_water",
-            name = "Drink 2 litres of water $DEMO_TAG",
-            lifeArea = LifeArea.HEALTH_LIFESTYLE,
-            scheduleType = "EVERY_DAY",
-            weekdaysCsv = "1,2,3,4,5,6,7",
-            dueWeekdays = DayOfWeek.entries.toSet()
-        ),
-        DemoHabitSpec(
-            id = "${DEMO_ID_PREFIX}habit_meditation",
-            name = "Meditation (15 min) $DEMO_TAG",
-            lifeArea = LifeArea.HEALTH_LIFESTYLE,
-            scheduleType = "EVERY_DAY",
-            weekdaysCsv = "1,2,3,4,5,6,7",
-            dueWeekdays = DayOfWeek.entries.toSet()
-        ),
-        DemoHabitSpec(
-            id = "${DEMO_ID_PREFIX}habit_exercise",
-            name = "Physical activity & mobility $DEMO_TAG",
-            lifeArea = LifeArea.HEALTH_LIFESTYLE,
-            scheduleType = "CUSTOM",
-            weekdaysCsv = "1,2,3,4,5,6",
-            dueWeekdays = setOf(
-                DayOfWeek.MONDAY,
-                DayOfWeek.TUESDAY,
-                DayOfWeek.WEDNESDAY,
-                DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY,
-                DayOfWeek.SATURDAY
-            )
-        ),
-        DemoHabitSpec(
-            id = "${DEMO_ID_PREFIX}habit_reading",
-            name = "Reading for learning (30 min) $DEMO_TAG",
-            lifeArea = LifeArea.CAREER_PRODUCTIVITY,
-            scheduleType = "EVERY_DAY",
-            weekdaysCsv = "1,2,3,4,5,6,7",
-            dueWeekdays = DayOfWeek.entries.toSet()
-        ),
-        DemoHabitSpec(
-            id = "${DEMO_ID_PREFIX}habit_english",
-            name = "English speaking practice $DEMO_TAG",
-            lifeArea = LifeArea.CAREER_PRODUCTIVITY,
-            scheduleType = "WEEKDAYS",
-            weekdaysCsv = "1,2,3,4,5",
-            dueWeekdays = setOf(
-                DayOfWeek.MONDAY,
-                DayOfWeek.TUESDAY,
-                DayOfWeek.WEDNESDAY,
-                DayOfWeek.THURSDAY,
-                DayOfWeek.FRIDAY
-            )
-        )
-    )
-
-    /**
-     * Resolves the target sample month. For `2026-11-19`, returns `October 2026`
-     * (`2026-10-01` .. `2026-10-31`).
-     */
-    fun targetSampleMonth(today: LocalDate = LocalDate.of(2026, 11, 19)): YearMonth {
-        return YearMonth.from(today).minusMonths(1)
-    }
-
-    /**
-     * Builds the deterministic 1-month sample entities without touching any DAO.
-     * Exposed as a pure function so unit tests can verify analytics and heatmap scores directly.
-     */
-    fun buildSampleMonthEntities(
-        yearMonth: YearMonth = YearMonth.of(2026, 10),
-        currencyCode: String = "INR"
-    ): SampleEntityBundle {
-        val monthStart = yearMonth.atDay(1)
-        val monthEnd = yearMonth.atEndOfMonth()
-        val zone = ZoneId.systemDefault()
-        val createdBaseMillis = monthStart.atStartOfDay(zone).toInstant().toEpochMilli()
-
-        // 1. Habits & Schedule Periods (active ONLY during October 1..31, 2026 so they do not pollute other months)
-        val deactivatedDateIso = DateAttributionPolicy.formatIsoDate(monthEnd.plusDays(1))
-        val deactivatedMillis = monthEnd.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-
-        val habitEntities = demoHabits.mapIndexed { idx, spec ->
-            HabitEntity(
-                id = spec.id,
-                name = spec.name,
-                isActive = false, // Deactivated on Nov 1 so October is a clean self-contained historical month
-                createdAtEpochMillis = createdBaseMillis + idx * 1000L,
-                updatedAtEpochMillis = createdBaseMillis + idx * 1000L,
-                deactivatedAtEpochMillis = deactivatedMillis,
-                deactivatedFromLocalDate = deactivatedDateIso,
-                lifeArea = spec.lifeArea.name
-            )
-        }
-
-        val scheduleEntities = demoHabits.mapIndexed { idx, spec ->
-            HabitSchedulePeriodEntity(
-                id = "${DEMO_ID_PREFIX}sched_${idx + 1}",
-                habitId = spec.id,
-                effectiveFrom = DateAttributionPolicy.formatIsoDate(monthStart),
-                effectiveTo = deactivatedDateIso,
-                scheduleType = spec.scheduleType,
-                weekdaysCsv = spec.weekdaysCsv,
-                createdAtEpochMillis = createdBaseMillis + idx * 1000L
-            )
-        }
-
-        // Day-by-day profile across the 31 days of October 2026:
-        // - Unrecorded rest/offline days (ELAPSED_NO_DATA): Oct 11 and Oct 25 -> 0 tasks, 0 habit completions, 0 transactions
-        // - Low-performance days (~20-35%): Oct 5, Oct 14, Oct 19, Oct 28
-        // - Average-performance days (~45-68%): Oct 2, 4, 7, 9, 13, 16, 18, 21, 23, 27, 30
-        // - High-performance days (~75-100%): Oct 1, 3, 6, 8, 10, 12, 15, 17, 20, 22, 24, 26, 29, 31
-        val noDataDays = setOf(11, 25)
-        val lowDays = setOf(5, 14, 19, 28)
-        val averageDays = setOf(2, 4, 7, 9, 13, 16, 18, 21, 23, 27, 30)
-
-        val completions = mutableListOf<HabitCompletionEntity>()
-        val tasks = mutableListOf<TaskEntity>()
-        val transactions = mutableListOf<FinanceTransactionEntity>()
-
-        val careerTaskCatalog = listOf(
-            "Draft Q4 architecture review notes" to TaskCategory.WORK,
-            "Complete Kotlin coroutines & Flow practice module" to TaskCategory.STUDY,
-            "Prepare sprint demo walkthrough slides" to TaskCategory.WORK,
-            "Refactor Room DAO queries and unit tests" to TaskCategory.WORK,
-            "Read chapter on distributed systems consensus" to TaskCategory.STUDY,
-            "Review pull requests and document API contract" to TaskCategory.WORK,
-            "Practice 20-minute technical presentation in English" to TaskCategory.STUDY,
-            "Write post-mortem summary for staging deployment" to TaskCategory.WORK,
-            "Solve 2 algorithm design problems" to TaskCategory.STUDY,
-            "Update engineering roadmap milestones" to TaskCategory.WORK
-        )
-
-        val healthTaskCatalog = listOf(
-            "Morning 5km outdoor run & stretching" to TaskCategory.PERSONAL,
-            "Prepare high-protein meal prep for 3 days" to TaskCategory.PERSONAL,
-            "Evening yoga and posture mobility routine" to TaskCategory.PERSONAL,
-            "Schedule annual dental & blood panel checkup" to TaskCategory.PERSONAL
-        )
-
-        val financeTaskCatalog = listOf(
-            "Reconcile monthly expense ledger & categories" to TaskCategory.PERSONAL,
-            "Review SIP mutual fund allocation for Q4" to TaskCategory.PERSONAL,
-            "Pay utility and broadband bills on time" to TaskCategory.PERSONAL
-        )
-
-        for (day in 1..yearMonth.lengthOfMonth()) {
-            val date = yearMonth.atDay(day)
-            val dateIso = DateAttributionPolicy.formatIsoDate(date)
-            val dayStartMillis = date.atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
-
-            if (day in noDataDays) {
-                // Intentionally leave 0 habit completions, 0 planned tasks, and 0 finance transactions
-                // so the 365-day heatmap demonstrates the distinct ELAPSED_NO_DATA visual state
-                // only if no habits are due? Wait: if habits are scheduled on Oct 11/25, a scheduled habit
-                // with 0 completions gives 0% score unless no habits are scheduled on that weekday!
-                // Wait: on Sundays (Oct 4, 11, 18, 25), let's check:
-                // If we want Oct 11 and Oct 25 (both Sundays!) to be true ELAPSED_NO_DATA days
-                // (no scheduled habits, no tasks, no transactions), we simply schedule the demo habits
-                // on Monday–Saturday (`1,2,3,4,5,6`)! Then Sundays have 0 scheduled habits unless tasks
-                // or transactions are logged on that Sunday (like Oct 4 and Oct 18 which will have tasks/finance,
-                // while Oct 11 and Oct 25 have no tasks and no transactions -> genuine ELAPSED_NO_DATA!).
-                continue
-            }
-
-            val dueHabitsForDay = demoHabits.filter { date.dayOfWeek in it.dueWeekdays }
-
-            // Habit completions based on day profile
-            dueHabitsForDay.forEachIndexed { hIdx, spec ->
-                val completed = when {
-                    day in lowDays -> hIdx == 0 // Only 1 of due habits completed (~20-25%)
-                    day in averageDays -> (hIdx + day) % 2 == 0 // ~50-60% completed
-                    else -> !(day % 3 == 0 && hIdx == dueHabitsForDay.lastIndex) // 80-100% completed
-                }
-                if (completed) {
-                    completions.add(
-                        HabitCompletionEntity(
-                            id = "${DEMO_ID_PREFIX}comp_${day}_${hIdx + 1}",
-                            habitId = spec.id,
-                            completionDate = dateIso,
-                            isCompleted = true,
-                            completedAtEpochMillis = dayStartMillis + (hIdx + 1) * 1800_000L,
-                            updatedAtEpochMillis = dayStartMillis + (hIdx + 1) * 1800_000L
-                        )
-                    )
-                }
-            }
-
-            // Daily tasks (2 to 3 tasks per active day with realistic variation)
-            val primaryCareer = careerTaskCatalog[(day * 3) % careerTaskCatalog.size]
-            val secondaryCareer = careerTaskCatalog[(day * 3 + 4) % careerTaskCatalog.size]
-
-            val taskSpecsForDay = mutableListOf(
-                Triple(primaryCareer.first, primaryCareer.second, LifeArea.CAREER_PRODUCTIVITY),
-                Triple(secondaryCareer.first, secondaryCareer.second, LifeArea.CAREER_PRODUCTIVITY)
-            )
-            if (day % 3 == 0) {
-                val hTask = healthTaskCatalog[(day / 3) % healthTaskCatalog.size]
-                taskSpecsForDay.add(Triple(hTask.first, hTask.second, LifeArea.HEALTH_LIFESTYLE))
-            } else if (day % 5 == 0) {
-                val fTask = financeTaskCatalog[(day / 5) % financeTaskCatalog.size]
-                taskSpecsForDay.add(Triple(fTask.first, fTask.second, LifeArea.FINANCE_WEALTH))
-            }
-
-            taskSpecsForDay.forEachIndexed { tIdx, (rawTitle, category, area) ->
-                val isDone = when {
-                    day in lowDays -> false // 0% tasks done on low days
-                    day in averageDays -> tIdx == 0 // 1 of 2-3 tasks done (~33-50%)
-                    else -> !(day % 4 == 0 && tIdx == taskSpecsForDay.lastIndex) // 67-100% done
-                }
-                val status = if (isDone) TaskStatus.COMPLETED.name else TaskStatus.PLANNED.name
-                val completedAt = if (isDone) dayStartMillis + (tIdx + 2) * 3600_000L else null
-                tasks.add(
-                    TaskEntity(
-                        id = "${DEMO_ID_PREFIX}task_${day}_${tIdx + 1}",
-                        title = "$rawTitle $DEMO_TAG",
-                        category = category.name,
-                        plannedDate = dateIso,
-                        plannedTime = String.format("%02d:00", 9 + tIdx * 2),
-                        estimatedDurationMinutes = 30 + (tIdx * 15),
-                        status = status,
-                        completedAtEpochMillis = completedAt,
-                        sortOrder = tIdx,
-                        createdAtEpochMillis = dayStartMillis,
-                        updatedAtEpochMillis = completedAt ?: dayStartMillis,
-                        lifeArea = area.name
-                    )
-                )
-            }
-
-            // Finance transactions (realistic monthly income + varied daily expenses)
-            if (day == 1) {
-                transactions.add(
-                    FinanceTransactionEntity(
-                        id = "${DEMO_ID_PREFIX}tx_income_salary",
-                        type = TransactionType.INCOME.name,
-                        amountMinor = 8_500_000L, // ₹85,000.00
-                        currencyCode = currencyCode,
-                        category = "Salary",
-                        transactionDate = dateIso,
-                        note = "Monthly salary credit $DEMO_TAG",
-                        createdAtEpochMillis = dayStartMillis,
-                        updatedAtEpochMillis = dayStartMillis
-                    )
-                )
-            } else if (day == 15) {
-                transactions.add(
-                    FinanceTransactionEntity(
-                        id = "${DEMO_ID_PREFIX}tx_income_freelance",
-                        type = TransactionType.INCOME.name,
-                        amountMinor = 1_500_000L, // ₹15,000.00
-                        currencyCode = currencyCode,
-                        category = "Freelance",
-                        transactionDate = dateIso,
-                        note = "Technical consulting payout $DEMO_TAG",
-                        createdAtEpochMillis = dayStartMillis,
-                        updatedAtEpochMillis = dayStartMillis
-                    )
-                )
-            }
-
-            // Add expense entries on ~18 days of the month (including some over-daily-budget days on lowDays)
-            if (day % 2 == 1 || day in lowDays) {
-                val (amountMinor, cat, noteText) = when {
-                    day == 5 -> Triple(320_000L, "Shopping", "Electronics & desk accessories")
-                    day == 14 -> Triple(280_000L, "Bills", "Home internet & utility bill")
-                    day == 19 -> Triple(260_000L, "Entertainment", "Weekend dinner & movie")
-                    day == 28 -> Triple(295_000L, "Health", "Pharmacy & supplements")
-                    day % 5 == 0 -> Triple(125_000L, "Food", "Groceries & fresh produce")
-                    day % 3 == 0 -> Triple(85_000L, "Transport", "Metro pass & cab commute")
-                    else -> Triple(110_000L, "Food", "Lunch & coffee")
-                }
-                transactions.add(
-                    FinanceTransactionEntity(
-                        id = "${DEMO_ID_PREFIX}tx_exp_$day",
-                        type = TransactionType.EXPENSE.name,
-                        amountMinor = amountMinor,
-                        currencyCode = currencyCode,
-                        category = cat,
-                        transactionDate = dateIso,
-                        note = "$noteText $DEMO_TAG",
-                        createdAtEpochMillis = dayStartMillis + 7200_000L,
-                        updatedAtEpochMillis = dayStartMillis + 7200_000L
-                    )
-                )
-            }
-        }
-
-        return SampleEntityBundle(
-            yearMonth = yearMonth,
-            habits = habitEntities,
-            schedulePeriods = scheduleEntities,
-            completions = completions,
-            tasks = tasks,
-            transactions = transactions
-        )
-    }
-
-    data class SampleEntityBundle(
-        val yearMonth: YearMonth,
-        val habits: List<HabitEntity>,
+    data class HistoricalSampleBundle(
         val schedulePeriods: List<HabitSchedulePeriodEntity>,
         val completions: List<HabitCompletionEntity>,
         val tasks: List<TaskEntity>,
         val transactions: List<FinanceTransactionEntity>
     )
 
-    suspend fun seedSampleMonth(
+    /**
+     * Pure deterministic builder for June 1 – November 18, 2026 historical sample records,
+     * driven by the user's real existing habits, schedules, completions, and tasks.
+     * Exposed as a pure function so unit tests can verify boundary conditions directly.
+     */
+    fun buildHistoricalSampleBundle(
+        existingHabits: List<HabitEntity>,
+        existingSchedulePeriods: List<HabitSchedulePeriodEntity>,
+        existingCompletions: List<HabitCompletionEntity>,
+        existingTasks: List<TaskEntity>,
+        currencyCode: String = "INR",
+        startDate: LocalDate = SAMPLE_START_DATE,
+        endDate: LocalDate = SAMPLE_END_DATE
+    ): HistoricalSampleBundle {
+        val zone = ZoneId.systemDefault()
+        val startMillis = startDate.atStartOfDay(zone).toInstant().toEpochMilli()
+
+        // Filter to real (non-demo) records only
+        val realHabits = existingHabits.filter { !isDemoId(it.id) }
+        val realSchedulesByHabit = existingSchedulePeriods
+            .filter { !isDemoId(it.id) }
+            .groupBy { it.habitId }
+        val realCompletionKeys = existingCompletions
+            .filter { !isDemoId(it.id) }
+            .map { it.habitId to it.completionDate }
+            .toSet()
+        val realTasks = existingTasks.filter { !isDemoId(it.id) }
+
+        val generatedSchedules = mutableListOf<HabitSchedulePeriodEntity>()
+        val generatedCompletions = mutableListOf<HabitCompletionEntity>()
+        val generatedTasks = mutableListOf<TaskEntity>()
+        val generatedTransactions = mutableListOf<FinanceTransactionEntity>()
+
+        // ---------------------------------------------------------------------
+        // 1. Historical habit completions for existing real habits ONLY
+        // ---------------------------------------------------------------------
+        for (habit in realHabits) {
+            val habitRealPeriods = realSchedulesByHabit[habit.id].orEmpty()
+            if (habitRealPeriods.isEmpty()) continue
+
+            val earliestPeriod = habitRealPeriods.minBy { it.effectiveFrom }
+            val earliestFromDate = DateAttributionPolicy.parseIsoDate(earliestPeriod.effectiveFrom)
+            val deactivatedFromDate = habit.deactivatedFromLocalDate?.let {
+                DateAttributionPolicy.parseIsoDate(it)
+            }
+
+            // If the real habit was created after startDate, attach an isolated demo schedule
+            // period covering [startDate, earliestFromDate) with the exact same weekdays.
+            val historicalPeriod: HabitSchedulePeriodEntity? = if (earliestFromDate.isAfter(startDate)) {
+                val periodEnd = if (deactivatedFromDate != null && deactivatedFromDate.isBefore(earliestFromDate)) {
+                    deactivatedFromDate
+                } else {
+                    earliestFromDate
+                }
+                if (periodEnd.isAfter(startDate)) {
+                    HabitSchedulePeriodEntity(
+                        id = "${DEMO_ID_PREFIX}sched_${habit.id}",
+                        habitId = habit.id,
+                        effectiveFrom = DateAttributionPolicy.formatIsoDate(startDate),
+                        effectiveTo = DateAttributionPolicy.formatIsoDate(periodEnd),
+                        scheduleType = earliestPeriod.scheduleType,
+                        weekdaysCsv = earliestPeriod.weekdaysCsv,
+                        createdAtEpochMillis = startMillis
+                    ).also { generatedSchedules.add(it) }
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+
+            val combinedPeriods = (habitRealPeriods + listOfNotNull(historicalPeriod))
+                .sortedByDescending { it.effectiveFrom }
+
+            var date = startDate
+            while (!date.isAfter(endDate)) {
+                // Respect deactivation boundary
+                if (deactivatedFromDate != null && !date.isBefore(deactivatedFromDate)) {
+                    date = date.plusDays(1)
+                    continue
+                }
+
+                val dateIso = DateAttributionPolicy.formatIsoDate(date)
+
+                // Find effective schedule on `date`
+                val activePeriod = combinedPeriods.firstOrNull { period ->
+                    val from = DateAttributionPolicy.parseIsoDate(period.effectiveFrom)
+                    val to = period.effectiveTo?.let { DateAttributionPolicy.parseIsoDate(it) }
+                    !date.isBefore(from) && (to == null || date.isBefore(to))
+                }
+
+                if (activePeriod != null) {
+                    val dueWeekdays = LifeAnalyticsRepository.decodeWeekdaysCsv(activePeriod.weekdaysCsv)
+                    val isScheduled = date.dayOfWeek in dueWeekdays
+
+                    // Respect schedule strictly AND never overwrite an existing real completion
+                    if (isScheduled && (habit.id to dateIso) !in realCompletionKeys) {
+                        if (shouldCompleteHabitOnDate(habit.id, date)) {
+                            val completedAt = date.atTime(8, 30)
+                                .atZone(zone).toInstant().toEpochMilli() +
+                                (stableHash("${habit.id}:$dateIso") % 3600) * 1000L
+                            generatedCompletions.add(
+                                HabitCompletionEntity(
+                                    id = "${DEMO_ID_PREFIX}comp_${habit.id}_$dateIso",
+                                    habitId = habit.id,
+                                    completionDate = dateIso,
+                                    isCompleted = true,
+                                    completedAtEpochMillis = completedAt,
+                                    updatedAtEpochMillis = completedAt
+                                )
+                            )
+                        }
+                    }
+                }
+                date = date.plusDays(1)
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // 2. Historical task records reusing existing task categories/titles
+        // ---------------------------------------------------------------------
+        val realTaskDatesByArea: Map<Pair<LocalDate, LifeArea?>, Boolean> = realTasks
+            .associate { (DateAttributionPolicy.parseIsoDate(it.plannedDate) to LifeArea.fromNameOrNull(it.lifeArea)) to true }
+
+        val userCareerTemplates = realTasks
+            .filter { LifeArea.fromNameOrNull(it.lifeArea) == LifeArea.CAREER_PRODUCTIVITY }
+            .map { it.title to TaskCategory.fromNameOrDefault(it.category) }
+            .distinctBy { it.first }
+        val userHealthTemplates = realTasks
+            .filter { LifeArea.fromNameOrNull(it.lifeArea) == LifeArea.HEALTH_LIFESTYLE }
+            .map { it.title to TaskCategory.fromNameOrDefault(it.category) }
+            .distinctBy { it.first }
+
+        val careerCatalog = userCareerTemplates.ifEmpty {
+            listOf(
+                "Review project milestones & notes" to TaskCategory.WORK,
+                "Focused study & skill practice" to TaskCategory.STUDY,
+                "Complete planned sprint deliverable" to TaskCategory.WORK,
+                "English speaking & reading session" to TaskCategory.STUDY,
+                "Organize weekly priorities" to TaskCategory.WORK
+            )
+        }
+        val healthCatalog = userHealthTemplates.ifEmpty {
+            listOf(
+                "Outdoor walk & stretching session" to TaskCategory.PERSONAL,
+                "Plan balanced meals for the day" to TaskCategory.PERSONAL,
+                "Evening mobility & recovery routine" to TaskCategory.PERSONAL
+            )
+        }
+
+        var taskDate = startDate
+        while (!taskDate.isAfter(endDate)) {
+            val dateIso = DateAttributionPolicy.formatIsoDate(taskDate)
+            val dayOfYear = taskDate.dayOfYear
+            val dayStartMillis = taskDate.atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+
+            // Leave occasional Sundays completely quiet so heatmap reflects natural rest days
+            val isQuietRestDay = taskDate.dayOfWeek == DayOfWeek.SUNDAY && (dayOfYear % 2 == 0)
+            if (!isQuietRestDay) {
+                var sortIdx = 0
+
+                // Career tasks: 1–2 on weekdays, 0–1 on weekends
+                if ((taskDate to LifeArea.CAREER_PRODUCTIVITY) !in realTaskDatesByArea) {
+                    val careerCount = when (taskDate.dayOfWeek) {
+                        DayOfWeek.SUNDAY -> 0
+                        DayOfWeek.SATURDAY -> if (dayOfYear % 3 == 0) 1 else 0
+                        else -> if (dayOfYear % 3 == 0) 2 else 1
+                    }
+                    for (i in 0 until careerCount) {
+                        val (rawTitle, category) = careerCatalog[(dayOfYear + i * 2) % careerCatalog.size]
+                        val isDone = shouldCompleteTaskOnDate("career_$i", taskDate)
+                        val completedAt = if (isDone) dayStartMillis + (i + 2) * 3600_000L else null
+                        generatedTasks.add(
+                            TaskEntity(
+                                id = "${DEMO_ID_PREFIX}task_${dateIso}_c${i + 1}",
+                                title = "$rawTitle $DEMO_TAG",
+                                category = category.name,
+                                plannedDate = dateIso,
+                                plannedTime = String.format("%02d:00", 9 + i * 3),
+                                estimatedDurationMinutes = 30 + (i * 15),
+                                status = if (isDone) TaskStatus.COMPLETED.name else TaskStatus.PLANNED.name,
+                                completedAtEpochMillis = completedAt,
+                                sortOrder = sortIdx++,
+                                createdAtEpochMillis = dayStartMillis,
+                                updatedAtEpochMillis = completedAt ?: dayStartMillis,
+                                lifeArea = LifeArea.CAREER_PRODUCTIVITY.name
+                            )
+                        )
+                    }
+                }
+
+                // Health task: ~3-4 days per week
+                if ((taskDate to LifeArea.HEALTH_LIFESTYLE) !in realTaskDatesByArea && (dayOfYear % 2 == 1)) {
+                    val (rawTitle, category) = healthCatalog[(dayOfYear / 2) % healthCatalog.size]
+                    val isDone = shouldCompleteTaskOnDate("health_0", taskDate)
+                    val completedAt = if (isDone) dayStartMillis + 3 * 3600_000L else null
+                    generatedTasks.add(
+                        TaskEntity(
+                            id = "${DEMO_ID_PREFIX}task_${dateIso}_h1",
+                            title = "$rawTitle $DEMO_TAG",
+                            category = category.name,
+                            plannedDate = dateIso,
+                            plannedTime = "07:30",
+                            estimatedDurationMinutes = 30,
+                            status = if (isDone) TaskStatus.COMPLETED.name else TaskStatus.PLANNED.name,
+                            completedAtEpochMillis = completedAt,
+                            sortOrder = sortIdx++,
+                            createdAtEpochMillis = dayStartMillis,
+                            updatedAtEpochMillis = completedAt ?: dayStartMillis,
+                            lifeArea = LifeArea.HEALTH_LIFESTYLE.name
+                        )
+                    )
+                }
+            }
+            taskDate = taskDate.plusDays(1)
+        }
+
+        // ---------------------------------------------------------------------
+        // 3. Finance sample transactions across June 1 – November 18, 2026
+        // ---------------------------------------------------------------------
+        val expenseCatalog = listOf(
+            Triple("Food", "Groceries & fresh produce", 95_000L..165_000L),
+            Triple("Food", "Lunch & coffee", 35_000L..85_000L),
+            Triple("Transport", "Commute & fuel", 45_000L..120_000L),
+            Triple("Bills", "Internet & utility bill", 140_000L..260_000L),
+            Triple("Health", "Pharmacy & wellness supplies", 60_000L..185_000L),
+            Triple("Shopping", "Household essentials", 110_000L..290_000L),
+            Triple("Entertainment", "Dinner & weekend outing", 80_000L..215_000L),
+            Triple("Education", "Books & learning resources", 75_000L..195_000L)
+        )
+
+        var txDate = startDate
+        while (!txDate.isAfter(endDate)) {
+            val dateIso = DateAttributionPolicy.formatIsoDate(txDate)
+            val dayMillis = txDate.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+            val monthIndex = txDate.monthValue - 6 // 0..5 for Jun..Nov
+
+            // Monthly income on the 1st (with realistic month-to-month variation)
+            if (txDate.dayOfMonth == 1) {
+                val salaryMinor = 8_200_000L + (monthIndex % 3) * 250_000L + (if (monthIndex == 4) 300_000L else 0L)
+                generatedTransactions.add(
+                    FinanceTransactionEntity(
+                        id = "${DEMO_ID_PREFIX}tx_${dateIso}_inc_salary",
+                        type = TransactionType.INCOME.name,
+                        amountMinor = salaryMinor,
+                        currencyCode = currencyCode,
+                        category = "Salary",
+                        transactionDate = dateIso,
+                        note = "Monthly salary credit $DEMO_TAG",
+                        createdAtEpochMillis = dayMillis,
+                        updatedAtEpochMillis = dayMillis
+                    )
+                )
+            }
+
+            // Occasional freelance/side income mid-month (not identical every month)
+            if (txDate.dayOfMonth == 14 && monthIndex in setOf(0, 2, 3, 5)) {
+                val sideMinor = 950_000L + (stableHash("side_$dateIso") % 8) * 125_000L
+                generatedTransactions.add(
+                    FinanceTransactionEntity(
+                        id = "${DEMO_ID_PREFIX}tx_${dateIso}_inc_side",
+                        type = TransactionType.INCOME.name,
+                        amountMinor = sideMinor,
+                        currencyCode = currencyCode,
+                        category = "Freelance",
+                        transactionDate = dateIso,
+                        note = "Consulting & side project payout $DEMO_TAG",
+                        createdAtEpochMillis = dayMillis + 1800_000L,
+                        updatedAtEpochMillis = dayMillis + 1800_000L
+                    )
+                )
+            }
+
+            // Realistic expenses on ~55% of days with varied amounts and categories
+            val hash = stableHash("exp_$dateIso")
+            if (hash % 100 < 58) {
+                val (cat, noteText, range) = expenseCatalog[hash % expenseCatalog.size]
+                val span = (range.last - range.first).coerceAtLeast(1L)
+                val stepOffset = ((stableHash("amt_$dateIso") % 40) * span) / 40L
+                // Round to nearest 500 minor units (₹5) for natural-looking amounts
+                val amountMinor = ((range.first + stepOffset) / 500L) * 500L
+                generatedTransactions.add(
+                    FinanceTransactionEntity(
+                        id = "${DEMO_ID_PREFIX}tx_${dateIso}_exp",
+                        type = TransactionType.EXPENSE.name,
+                        amountMinor = amountMinor,
+                        currencyCode = currencyCode,
+                        category = cat,
+                        transactionDate = dateIso,
+                        note = "$noteText $DEMO_TAG",
+                        createdAtEpochMillis = dayMillis + 3600_000L,
+                        updatedAtEpochMillis = dayMillis + 3600_000L
+                    )
+                )
+            }
+
+            txDate = txDate.plusDays(1)
+        }
+
+        return HistoricalSampleBundle(
+            schedulePeriods = generatedSchedules,
+            completions = generatedCompletions,
+            tasks = generatedTasks,
+            transactions = generatedTransactions
+        )
+    }
+
+    /**
+     * Rebuilds the June 1 – November 18, 2026 sample dataset idempotently for the user's
+     * existing real habits & tasks, without modifying or deleting any real personal records.
+     */
+    suspend fun rebuildHistoricalSampleData(
         taskDao: TaskDao,
         habitDao: HabitDao,
         financeDao: FinanceDao,
-        yearMonth: YearMonth = YearMonth.of(2026, 10),
         currencyCode: String = "INR"
     ): SeedSummary {
-        // Adjust demo habits so all 5 are Mon-Sat (weekdays 1..6) ensuring Oct 11 and Oct 25 (Sundays)
-        // have 0 scheduled habits and 0 tasks/transactions -> genuine ELAPSED_NO_DATA days in the heatmap!
-        val bundle = buildSampleMonthEntitiesWithSundayRest(yearMonth, currencyCode)
+        // 1. Clean up any legacy Oct-2026 demo records and any previous `demo_hist_` rows
+        removeLegacyOctoberDemoData(taskDao, habitDao, financeDao)
+        removeHistoricalSampleData(taskDao, habitDao, financeDao)
 
-        // Idempotent upsert via OnConflictStrategy.REPLACE on deterministic demo_oct2026_* primary keys
-        taskDao.upsertAllTasks(bundle.tasks)
-        habitDao.upsertAllHabits(bundle.habits)
-        habitDao.upsertAllSchedulePeriods(bundle.schedulePeriods)
-        habitDao.upsertAllCompletions(bundle.completions)
-        financeDao.upsertAllTransactions(bundle.transactions)
+        // 2. Inspect existing real habits, schedules, completions, and tasks
+        val existingHabits = habitDao.getAllHabitEntities()
+        val existingSchedules = habitDao.getAllSchedulePeriodEntities()
+        val existingCompletions = habitDao.getAllCompletionEntities()
+        val existingTasks = taskDao.getAllTasks()
 
+        val bundle = buildHistoricalSampleBundle(
+            existingHabits = existingHabits,
+            existingSchedulePeriods = existingSchedules,
+            existingCompletions = existingCompletions,
+            existingTasks = existingTasks,
+            currencyCode = currencyCode
+        )
+
+        // 3. Insert only isolated `demo_hist_*` records
+        if (bundle.schedulePeriods.isNotEmpty()) {
+            habitDao.upsertAllSchedulePeriods(bundle.schedulePeriods)
+        }
+        if (bundle.completions.isNotEmpty()) {
+            habitDao.upsertAllCompletions(bundle.completions)
+        }
+        if (bundle.tasks.isNotEmpty()) {
+            taskDao.upsertAllTasks(bundle.tasks)
+        }
+        if (bundle.transactions.isNotEmpty()) {
+            financeDao.upsertAllTransactions(bundle.transactions)
+        }
+
+        val realHabitsUsed = existingHabits.count { !isDemoId(it.id) }
         return SeedSummary(
-            monthLabel = DateAttributionPolicy.formatMonthYear(yearMonth),
-            habitsSeeded = bundle.habits.size,
+            rangeLabel = "Jun 1 – Nov 18, 2026",
+            existingHabitsUsed = realHabitsUsed,
             habitCompletionsSeeded = bundle.completions.size,
             tasksSeeded = bundle.tasks.size,
             transactionsSeeded = bundle.transactions.size
@@ -393,52 +424,102 @@ object SampleDataSeeder {
     }
 
     /**
-     * Ensures Sundays without tasks/transactions (Oct 11 & Oct 25) have 0 due habits so the
-     * 365-day heatmap displays both scored elapsed days (intensity 1..4) AND elapsed no-data days.
+     * Removes only `demo_hist_*` schedule periods, completions, tasks, and transactions.
+     * Real user habits, real schedules, real completions, real tasks, and real transactions
+     * are never modified or deleted.
      */
-    fun buildSampleMonthEntitiesWithSundayRest(
-        yearMonth: YearMonth = YearMonth.of(2026, 10),
-        currencyCode: String = "INR"
-    ): SampleEntityBundle {
-        val monToSat = setOf(
-            DayOfWeek.MONDAY,
-            DayOfWeek.TUESDAY,
-            DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY,
-            DayOfWeek.FRIDAY,
-            DayOfWeek.SATURDAY
-        )
-        val base = buildSampleMonthEntities(yearMonth, currencyCode)
-        val adjustedSchedules = base.schedulePeriods.map { sp ->
-            if (sp.weekdaysCsv == "1,2,3,4,5,6,7") {
-                sp.copy(scheduleType = "CUSTOM", weekdaysCsv = "1,2,3,4,5,6")
-            } else {
-                sp
-            }
-        }
-        val adjustedCompletions = base.completions.filter { comp ->
-            val date = DateAttributionPolicy.parseIsoDate(comp.completionDate)
-            date.dayOfWeek in monToSat
-        }
-        return base.copy(
-            schedulePeriods = adjustedSchedules,
-            completions = adjustedCompletions
-        )
-    }
-
-    suspend fun removeSampleMonth(
+    suspend fun removeHistoricalSampleData(
         taskDao: TaskDao,
         habitDao: HabitDao,
         financeDao: FinanceDao
     ) {
-        val tasks = taskDao.getAllTasks().filter { it.id.startsWith(DEMO_ID_PREFIX) }
-        tasks.forEach { taskDao.deleteTaskById(it.id) }
+        taskDao.getAllTasks()
+            .filter { it.id.startsWith(DEMO_ID_PREFIX) }
+            .forEach { taskDao.deleteTaskById(it.id) }
 
-        val demoHabitsList = habitDao.getAllHabitEntities().filter { it.id.startsWith(DEMO_ID_PREFIX) }
-        // Deleting a habit by ID cascades to habit_schedule_periods and habit_completions via ForeignKey.CASCADE
-        demoHabitsList.forEach { habitDao.deleteHabitById(it.id) }
+        habitDao.getAllCompletionEntities()
+            .filter { it.id.startsWith(DEMO_ID_PREFIX) }
+            .forEach { habitDao.deleteCompletionById(it.id) }
 
-        val demoTxs = financeDao.getAllTransactionEntities().filter { it.id.startsWith(DEMO_ID_PREFIX) }
-        demoTxs.forEach { financeDao.deleteTransactionById(it.id) }
+        habitDao.getAllSchedulePeriodEntities()
+            .filter { it.id.startsWith(DEMO_ID_PREFIX) }
+            .forEach { habitDao.deleteSchedulePeriodById(it.id) }
+
+        financeDao.getAllTransactionEntities()
+            .filter { it.id.startsWith(DEMO_ID_PREFIX) }
+            .forEach { financeDao.deleteTransactionById(it.id) }
+    }
+
+    /**
+     * Removes legacy `demo_oct2026_*` records (including the old 5 `[Demo]`-tagged habits)
+     * so no artificial `[Demo]` habits remain in the user's database.
+     */
+    suspend fun removeLegacyOctoberDemoData(
+        taskDao: TaskDao,
+        habitDao: HabitDao,
+        financeDao: FinanceDao
+    ) {
+        taskDao.getAllTasks()
+            .filter { it.id.startsWith(LEGACY_OCT2026_PREFIX) }
+            .forEach { taskDao.deleteTaskById(it.id) }
+
+        // Deleting legacy demo habits cascades to their schedule periods and completions
+        habitDao.getAllHabitEntities()
+            .filter { it.id.startsWith(LEGACY_OCT2026_PREFIX) }
+            .forEach { habitDao.deleteHabitById(it.id) }
+
+        financeDao.getAllTransactionEntities()
+            .filter { it.id.startsWith(LEGACY_OCT2026_PREFIX) }
+            .forEach { financeDao.deleteTransactionById(it.id) }
+    }
+
+    fun isDemoId(id: String): Boolean {
+        return id.startsWith(DEMO_ID_PREFIX) || id.startsWith(LEGACY_OCT2026_PREFIX)
+    }
+
+    /**
+     * Deterministic natural-variation adherence (~68–84% overall, never 100%, with
+     * realistic monthly waves and occasional missed/low days).
+     */
+    private fun shouldCompleteHabitOnDate(habitId: String, date: LocalDate): Boolean {
+        val monthWave = when (date.monthValue) {
+            6 -> 72
+            7 -> 78
+            8 -> 66 // realistic mid-summer dip
+            9 -> 82
+            10 -> 76
+            else -> 80
+        }
+        // Slight weekend dip for realism
+        val weekendAdj = if (date.dayOfWeek == DayOfWeek.SUNDAY || date.dayOfWeek == DayOfWeek.SATURDAY) -8 else 0
+        // Occasional off-day (roughly 2 days per month)
+        val dayHash = stableHash("day_mood_${date.toEpochDay()}") % 100
+        if (dayHash < 6) return false
+
+        val habitOffset = (stableHash(habitId) % 15) - 7 // -7..+7 per habit
+        val threshold = (monthWave + weekendAdj + habitOffset).coerceIn(45, 88)
+        val roll = stableHash("habit_${habitId}_${date.toEpochDay()}") % 100
+        return roll < threshold
+    }
+
+    private fun shouldCompleteTaskOnDate(slotKey: String, date: LocalDate): Boolean {
+        val monthWave = when (date.monthValue) {
+            6 -> 70
+            7 -> 76
+            8 -> 64
+            9 -> 80
+            10 -> 75
+            else -> 78
+        }
+        val roll = stableHash("task_${slotKey}_${date.toEpochDay()}") % 100
+        return roll < monthWave
+    }
+
+    private fun stableHash(input: String): Int {
+        var h = 1125899906842597L
+        for (ch in input) {
+            h = 31L * h + ch.code.toLong()
+        }
+        return abs((h xor (h ushr 32)).toInt())
     }
 }

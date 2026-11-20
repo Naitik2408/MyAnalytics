@@ -15,15 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.RateReview
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -41,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,7 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.lifeanalytics.app.core.designsystem.ErrorBanner
 import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
 import com.lifeanalytics.app.core.designsystem.LaCategoryPerformancePanel
-import com.lifeanalytics.app.core.designsystem.LaCircularIconButton
+import com.lifeanalytics.app.core.designsystem.LaActionPillGroup
+import com.lifeanalytics.app.core.designsystem.LaActionSpec
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaDayDrilldownBottomSheet
 import com.lifeanalytics.app.core.designsystem.LaIconChip
@@ -60,7 +60,6 @@ import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.LaYear365Calendar
 import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
-import com.lifeanalytics.app.data.demo.SampleDataSeeder
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow
 import com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine
@@ -85,8 +84,7 @@ fun HomeDashboardScreen(
     onNavigateToPlanning: (LocalDate) -> Unit,
     onNavigateToHabits: (LocalDate) -> Unit,
     onNavigateToFinanceDay: (LocalDate) -> Unit,
-    onNavigateToDailyReview: (LocalDate) -> Unit,
-    onNavigateToSettings: () -> Unit,
+    onNavigateToProfile: () -> Unit,
     onNavigateToInsights: () -> Unit = {}
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
@@ -119,26 +117,21 @@ fun HomeDashboardScreen(
     var selectedTrendPointIdx by rememberSaveable { mutableIntStateOf(0) }
     var drilldownDateEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    // If the current month (e.g. Nov 2026) has no records yet, but October 2026 sample data is present,
-    // automatically anchor the Monthly analytics card to October 2026 so the Home Page immediately
-    // displays the October 2026 overall score, category breakdowns, and trend!
-    val currentMonthYm = remember(today) { YearMonth.from(today) }
-    val sampleMonthYm = remember(today) { SampleDataSeeder.targetSampleMonth(today) }
-
+    // If the current month has no activity yet (e.g. on the 1st), anchor the Monthly analytics
+    // card to the most recent month that does have recorded activity, so Home never shows an
+    // empty trend while real history exists. Purely derived from source records.
     LaunchedEffect(allTasks.size, allCompletions.size, allTransactions.size, userAdjustedAnchor) {
         if (!userAdjustedAnchor && analyticsWindow == AnalyticsTimeWindow.MONTHLY) {
-            val hasCurrentMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == currentMonthYm } ||
-                allCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == currentMonthYm } ||
-                allTransactions.any { YearMonth.from(it.transactionDate) == currentMonthYm }
-
-            val hasSampleMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == sampleMonthYm } ||
-                allCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == sampleMonthYm } ||
-                allTransactions.any { YearMonth.from(it.transactionDate) == sampleMonthYm }
-
-            if (!hasCurrentMonthActivity && hasSampleMonthActivity) {
-                analyticsAnchorEpoch = sampleMonthYm.atEndOfMonth().toEpochDay()
-            } else if (hasCurrentMonthActivity) {
-                analyticsAnchorEpoch = today.toEpochDay()
+            val activityDates = sequenceOf(
+                allTasks.asSequence().map { it.plannedDate },
+                allCompletions.asSequence().filter { it.isCompleted }.map { it.completionDate },
+                allTransactions.asSequence().map { it.transactionDate }
+            ).flatten().filter { !it.isAfter(today) }
+            val latestActivity = activityDates.maxOrNull()
+            analyticsAnchorEpoch = if (latestActivity == null || YearMonth.from(latestActivity) == YearMonth.from(today)) {
+                today.toEpochDay()
+            } else {
+                YearMonth.from(latestActivity).atEndOfMonth().toEpochDay()
             }
         }
     }
@@ -248,44 +241,31 @@ fun HomeDashboardScreen(
                         )
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .pressScaleClickable(onClick = onNavigateToProfile)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = "Open profile and account"
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            LaIconChip(
-                                icon = Icons.Outlined.Person,
-                                backgroundColor = colors.tints.lavender.base,
-                                size = 40.dp
+                        LaIconChip(
+                            icon = Icons.Outlined.Person,
+                            backgroundColor = colors.tints.lavender.base,
+                            size = 44.dp
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = greeting,
+                                style = LaTheme.typography.sectionTitle,
+                                color = colors.textPrimary
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = greeting,
-                                    style = LaTheme.typography.sectionTitle,
-                                    color = colors.textPrimary
-                                )
-                                Text(
-                                    text = DateAttributionPolicy.formatDisplayDate(today),
-                                    style = LaTheme.typography.label,
-                                    color = colors.textSecondary
-                                )
-                            }
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LaCircularIconButton(
-                                icon = Icons.Outlined.RateReview,
-                                contentDescription = "Daily Review",
-                                onClick = { onNavigateToDailyReview(today) }
-                            )
-                            LaCircularIconButton(
-                                icon = Icons.Outlined.Settings,
-                                contentDescription = "Settings",
-                                onClick = onNavigateToSettings
+                            Text(
+                                text = DateAttributionPolicy.formatDisplayDate(today),
+                                style = LaTheme.typography.label,
+                                color = colors.textSecondary
                             )
                         }
                     }
@@ -343,30 +323,16 @@ fun HomeDashboardScreen(
                 }
             }
 
-            // 3. Quick Action Buttons: Add task, Add habit, Add expense (Immediately below Heatmap)
+            // 3. Quick Actions (reference layout): primary full-width "Add task", then Add habit + Add expense
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = spacing.screenInset),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HomeActionPillButton(
-                        text = "Add task",
-                        onClick = { showAddTaskDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                    HomeActionPillButton(
-                        text = "Add habit",
-                        onClick = { showAddHabitDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                    HomeActionPillButton(
-                        text = "Add expense",
-                        onClick = { showAddExpenseDialog = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                LaActionPillGroup(
+                    primary = LaActionSpec("Add task", { showAddTaskDialog = true }),
+                    secondary = listOf(
+                        LaActionSpec("Add habit", { showAddHabitDialog = true }),
+                        LaActionSpec("Add expense", { showAddExpenseDialog = true })
+                    ),
+                    modifier = Modifier.padding(horizontal = spacing.screenInset)
+                )
             }
 
             // 4. Single Streamlined Performance Trend Card (Visual curve, no cluttered number tables)
@@ -784,39 +750,6 @@ private fun HomeTaskListRow(
             text = task.lifeArea?.shortName ?: task.category.displayName,
             style = LaTheme.typography.chartMicroLabel,
             color = colors.textSecondary
-        )
-    }
-}
-
-@Composable
-private fun HomeActionPillButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colors = LaTheme.colors
-    Row(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(colors.surface)
-            .border(1.dp, colors.outline.copy(alpha = 0.5f), CircleShape)
-            .pressScaleClickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Add,
-            contentDescription = null,
-            tint = colors.accent,
-            modifier = Modifier.size(16.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = LaTheme.typography.buttonLabel.copy(fontWeight = FontWeight.SemiBold),
-            color = colors.textPrimary,
-            maxLines = 1
         )
     }
 }

@@ -172,6 +172,9 @@ interface HabitDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAllCompletions(completions: List<HabitCompletionEntity>)
 
+    @Query("DELETE FROM habit_completions WHERE id = :completionId")
+    suspend fun deleteCompletionById(completionId: String)
+
     @Query("DELETE FROM habits WHERE id = :habitId")
     suspend fun deleteHabitById(habitId: String)
 

@@ -134,23 +134,18 @@ fun InsightsScreen(
     val allHabitCompletions by repository.observeAllHabitCompletions().collectAsState(initial = emptyList())
     val allTransactions by repository.observeAllTransactions().collectAsState(initial = emptyList())
 
-    val currentMonthYm = remember(today) { YearMonth.from(today) }
-    val sampleMonthYm = remember(today) { SampleDataSeeder.targetSampleMonth(today) }
-
     LaunchedEffect(allTasks.size, allHabitCompletions.size, allTransactions.size, userAdjustedAnchor) {
         if (!userAdjustedAnchor && periodType == InsightsPeriodType.MONTHLY) {
-            val hasCurrentMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == currentMonthYm } ||
-                allHabitCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == currentMonthYm } ||
-                allTransactions.any { YearMonth.from(it.transactionDate) == currentMonthYm }
+            val latestActivity = sequenceOf(
+                allTasks.asSequence().map { it.plannedDate },
+                allHabitCompletions.asSequence().filter { it.isCompleted }.map { it.completionDate },
+                allTransactions.asSequence().map { it.transactionDate }
+            ).flatten().filter { !it.isAfter(today) }.maxOrNull()
 
-            val hasSampleMonthActivity = allTasks.any { YearMonth.from(it.plannedDate) == sampleMonthYm } ||
-                allHabitCompletions.any { it.isCompleted && YearMonth.from(it.completionDate) == sampleMonthYm } ||
-                allTransactions.any { YearMonth.from(it.transactionDate) == sampleMonthYm }
-
-            if (!hasCurrentMonthActivity && hasSampleMonthActivity) {
-                anchorDateEpoch = sampleMonthYm.atEndOfMonth().toEpochDay()
-            } else if (hasCurrentMonthActivity) {
-                anchorDateEpoch = today.toEpochDay()
+            anchorDateEpoch = if (latestActivity == null || YearMonth.from(latestActivity) == YearMonth.from(today)) {
+                today.toEpochDay()
+            } else {
+                YearMonth.from(latestActivity).atEndOfMonth().toEpochDay()
             }
         }
     }

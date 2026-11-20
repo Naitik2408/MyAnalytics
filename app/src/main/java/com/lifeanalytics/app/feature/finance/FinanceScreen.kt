@@ -244,14 +244,14 @@ fun FinanceScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(spacing.space4)
         ) {
-            // 1. Header with Screen Title & Single Primary Ink "Add entry" Button
+            // 1. Header with Screen Title & Single Primary Ink "Add" (+) Button
             item {
                 LaScreenHeader(
                     title = "Finance",
                     subtitle = "Income, expenses, and cash flow"
                 ) {
                     LaPrimaryButton(
-                        text = "Add entry",
+                        text = "Add",
                         icon = Icons.Outlined.Add,
                         onClick = { showAddDialog = true }
                     )

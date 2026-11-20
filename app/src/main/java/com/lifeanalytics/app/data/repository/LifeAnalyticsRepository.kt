@@ -849,35 +849,40 @@ class LifeAnalyticsRepository(
     }
 
     // =========================================================================
-    // ISOLATED 1-MONTH DEMO / SAMPLE DATASET (October 2026)
+    // ISOLATED HISTORICAL SAMPLE DATASET (June 1 – November 18, 2026)
     // =========================================================================
 
-    suspend fun hasDemoSampleData(): Boolean {
-        return taskDao.getAllTasks().any {
-            it.id.startsWith(com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_ID_PREFIX)
-        } || habitDao.getAllHabitEntities().any {
-            it.id.startsWith(com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_ID_PREFIX)
-        }
+    suspend fun hasHistoricalSampleData(): Boolean {
+        val prefix = com.lifeanalytics.app.data.demo.SampleDataSeeder.DEMO_ID_PREFIX
+        return taskDao.getAllTasks().any { it.id.startsWith(prefix) } ||
+            habitDao.getAllCompletionEntities().any { it.id.startsWith(prefix) } ||
+            habitDao.getAllSchedulePeriodEntities().any { it.id.startsWith(prefix) } ||
+            financeDao.getAllTransactionEntities().any { it.id.startsWith(prefix) }
     }
 
-    suspend fun seedDemoSampleMonth(
+    suspend fun rebuildHistoricalSampleData(
         currencyCode: String = "INR"
     ): Result<com.lifeanalytics.app.data.demo.SampleDataSeeder.SeedSummary> = database.withTransaction {
-        val targetMonth = com.lifeanalytics.app.data.demo.SampleDataSeeder.targetSampleMonth(
-            timeProvider.todayLocalDate()
-        )
-        val summary = com.lifeanalytics.app.data.demo.SampleDataSeeder.seedSampleMonth(
+        val summary = com.lifeanalytics.app.data.demo.SampleDataSeeder.rebuildHistoricalSampleData(
             taskDao = taskDao,
             habitDao = habitDao,
             financeDao = financeDao,
-            yearMonth = targetMonth,
             currencyCode = currencyCode
         )
         Result.success(summary)
     }
 
-    suspend fun removeDemoSampleMonth(): Result<Unit> = database.withTransaction {
-        com.lifeanalytics.app.data.demo.SampleDataSeeder.removeSampleMonth(
+    suspend fun removeHistoricalSampleData(): Result<Unit> = database.withTransaction {
+        com.lifeanalytics.app.data.demo.SampleDataSeeder.removeHistoricalSampleData(
+            taskDao = taskDao,
+            habitDao = habitDao,
+            financeDao = financeDao
+        )
+        Result.success(Unit)
+    }
+
+    suspend fun removeLegacyOctoberDemoData(): Result<Unit> = database.withTransaction {
+        com.lifeanalytics.app.data.demo.SampleDataSeeder.removeLegacyOctoberDemoData(
             taskDao = taskDao,
             habitDao = habitDao,
             financeDao = financeDao

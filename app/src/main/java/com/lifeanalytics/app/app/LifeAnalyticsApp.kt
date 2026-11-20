@@ -29,7 +29,6 @@ import com.lifeanalytics.app.core.designsystem.LaFloatingDock
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
 import com.lifeanalytics.app.data.backup.BackupManager
-import com.lifeanalytics.app.data.demo.SampleDataSeeder
 import com.lifeanalytics.app.data.repository.LifeAnalyticsRepository
 import com.lifeanalytics.app.data.repository.PreferencesRepository
 import com.lifeanalytics.app.domain.model.AppPreferences
@@ -43,6 +42,7 @@ import com.lifeanalytics.app.feature.career.CareerScreen
 import com.lifeanalytics.app.feature.health.HealthScreen
 import com.lifeanalytics.app.feature.insights.InsightsScreen
 import com.lifeanalytics.app.feature.planning.DailyPlanningScreen
+import com.lifeanalytics.app.feature.profile.ProfileScreen
 import com.lifeanalytics.app.feature.review.DailyReviewScreen
 import com.lifeanalytics.app.feature.settings.SettingsScreen
 import java.time.LocalDate
@@ -76,17 +76,15 @@ fun LifeAnalyticsApp(
     var reviewDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var financeDayFilterEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    // Ensure the isolated October 1–31, 2026 sample dataset is automatically populated
-    // on initial launch so the Home Page immediately displays real calculated historical analytics
+    // Historical sample data (June 1 – Nov 18, 2026) is generated on-device for the user's
+    // own existing habits/tasks. All generated rows use the `demo_hist_` ID prefix, never touch
+    // real rows, and are rebuilt idempotently on launch while enabled (so newly created habits
+    // receive history too). The legacy October-2026 [Demo] habits are always cleaned up.
+    // Turning it off in Settings removes every generated row and stops regeneration.
     LaunchedEffect(Unit) {
-        if (!preferencesRepository.hasAutoSeededOct2026Demo()) {
-            if (!repository.hasDemoSampleData()) {
-                repository.seedDemoSampleMonth(preferences.currencyCode)
-                if (preferences.monthlyBudgetMinor == null || preferences.monthlyBudgetMinor == 0L) {
-                    preferencesRepository.setMonthlyBudgetMinor(SampleDataSeeder.DEMO_MONTHLY_BUDGET_MINOR)
-                }
-            }
-            preferencesRepository.setAutoSeededOct2026Demo(true)
+        repository.removeLegacyOctoberDemoData()
+        if (preferencesRepository.isSampleHistoryEnabled()) {
+            repository.rebuildHistoricalSampleData(preferences.currencyCode)
         }
     }
 
@@ -131,12 +129,8 @@ fun LifeAnalyticsApp(
                             launchSingleTop = true
                         }
                     },
-                    onNavigateToDailyReview = { date ->
-                        reviewDateEpoch = date.toEpochDay()
-                        navController.navigate("review")
-                    },
-                    onNavigateToSettings = {
-                        navController.navigate("settings")
+                    onNavigateToProfile = {
+                        navController.navigate("profile")
                     },
                     onNavigateToInsights = {
                         navController.navigate("insights")
@@ -226,6 +220,28 @@ fun LifeAnalyticsApp(
                     currencyCode = preferences.currencyCode,
                     initialDate = LocalDate.ofEpochDay(reviewDateEpoch),
                     onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("profile") {
+                ProfileScreen(
+                    backupManager = backupManager,
+                    onNavigateBack = { navController.popBackStack() },
+                    onOpenDailyReview = {
+                        reviewDateEpoch = today.toEpochDay()
+                        navController.navigate("review")
+                    },
+                    onOpenInsights = { navController.navigate("insights") },
+                    onOpenTasks = {
+                        planningDateEpoch = today.toEpochDay()
+                        navController.navigate("planning")
+                    },
+                    onOpenHabits = {
+                        habitsDateEpoch = today.toEpochDay()
+                        navController.navigate("habits")
+                    },
+                    onOpenActivity = { navController.navigate("activity") },
+                    onOpenSettings = { navController.navigate("settings") }
                 )
             }
 

@@ -25,7 +25,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val THEME_OPTION = stringPreferencesKey("theme_option_v12")
         val CURRENCY_CODE = stringPreferencesKey("currency_code")
         val MONTHLY_BUDGET_MINOR = longPreferencesKey("monthly_budget_minor")
-        val DEMO_AUTO_SEEDED_OCT_2026 = booleanPreferencesKey("demo_auto_seeded_oct2026_v1")
+        val SAMPLE_HISTORY_ENABLED = booleanPreferencesKey("sample_history_jun_nov_2026_enabled_v1")
     }
 
     val preferencesFlow: Flow<AppPreferences> = dataStore.data.map { prefs ->
@@ -40,14 +40,19 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         )
     }
 
-    suspend fun hasAutoSeededOct2026Demo(): Boolean {
+    /**
+     * Whether the on-device historical sample data (June 1 – Nov 18, 2026) should be kept and
+     * regenerated for the user's existing habits. Defaults to enabled; turning it off from
+     * Settings removes all `demo_hist_` rows and prevents regeneration.
+     */
+    suspend fun isSampleHistoryEnabled(): Boolean {
         val prefs = dataStore.data.first()
-        return prefs[Keys.DEMO_AUTO_SEEDED_OCT_2026] == true
+        return prefs[Keys.SAMPLE_HISTORY_ENABLED] ?: true
     }
 
-    suspend fun setAutoSeededOct2026Demo(seeded: Boolean) {
+    suspend fun setSampleHistoryEnabled(enabled: Boolean) {
         dataStore.edit { prefs ->
-            prefs[Keys.DEMO_AUTO_SEEDED_OCT_2026] = seeded
+            prefs[Keys.SAMPLE_HISTORY_ENABLED] = enabled
         }
     }
 
