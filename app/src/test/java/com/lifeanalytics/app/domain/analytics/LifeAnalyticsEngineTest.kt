@@ -452,4 +452,58 @@ class LifeAnalyticsEngineTest {
         assertNotNull(cal.averageYearScore)
         assertEquals(1, cal.scoredDaysCount)
     }
+
+    @Test
+    fun `category trend series projects area scores and preserves null for missing intervals`() {
+        val healthHabit = makeHabit(
+            id = "h1",
+            lifeArea = LifeArea.HEALTH_LIFESTYLE,
+            activeFromDate = refToday.minusDays(2)
+        )
+        val careerTask = makeTask(
+            id = "c1",
+            plannedDate = refToday,
+            isCompleted = true,
+            lifeArea = LifeArea.CAREER_PRODUCTIVITY
+        )
+        val completions = listOf(
+            HabitCompletion(
+                id = "comp1",
+                habitId = "h1",
+                completionDate = refToday,
+                isCompleted = true,
+                completedAtEpochMillis = 1L,
+                updatedAtEpochMillis = 1L
+            )
+        )
+
+        val healthSeries = LifeAnalyticsEngine.buildCategoryTrendSeries(
+            lifeArea = LifeArea.HEALTH_LIFESTYLE,
+            window = AnalyticsTimeWindow.DAILY,
+            anchorDate = refToday,
+            today = refToday,
+            habits = listOf(healthHabit),
+            completions = completions,
+            tasks = listOf(careerTask)
+        )
+        val careerSeries = LifeAnalyticsEngine.buildCategoryTrendSeries(
+            lifeArea = LifeArea.CAREER_PRODUCTIVITY,
+            window = AnalyticsTimeWindow.DAILY,
+            anchorDate = refToday,
+            today = refToday,
+            habits = listOf(healthHabit),
+            completions = completions,
+            tasks = listOf(careerTask)
+        )
+
+        assertEquals(7, healthSeries.size)
+        assertEquals(100, healthSeries.last().overallScore)
+        // Earlier day before habit existed must be null, never 0
+        assertNull(healthSeries.first().overallScore)
+
+        assertEquals(7, careerSeries.size)
+        assertEquals(100, careerSeries.last().overallScore)
+        assertNull(careerSeries.first().overallScore)
+    }
 }
+

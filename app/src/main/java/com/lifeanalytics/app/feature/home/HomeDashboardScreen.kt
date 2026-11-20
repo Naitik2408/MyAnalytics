@@ -412,6 +412,32 @@ fun HomeDashboardScreen(
                             emptyMessage = "No scored intervals yet.",
                             accessibilitySummary = "Performance trend chart."
                         )
+                        if (selectedPt != null && selectedPt.overallScore != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            LaRowDivider()
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Health ${selectedPt.healthScore?.let { "$it%" } ?: "—"}",
+                                    style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.textSecondary
+                                )
+                                Text(
+                                    text = "Career ${selectedPt.careerScore?.let { "$it%" } ?: "—"}",
+                                    style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.textSecondary
+                                )
+                                Text(
+                                    text = "Finance ${selectedPt.financeScore?.let { "$it%" } ?: "—"}",
+                                    style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -421,6 +447,7 @@ fun HomeDashboardScreen(
                 Box(modifier = Modifier.padding(horizontal = spacing.screenInset)) {
                     LaContainerPanel(
                         title = "Today's tasks",
+                        subtitle = if (todayTasks.isNotEmpty()) "${taskSummary.completedCount} of ${taskSummary.totalCount} completed" else null,
                         actionLabel = "View all",
                         onActionClick = { onNavigateToPlanning(today) }
                     ) {
@@ -476,6 +503,7 @@ fun HomeDashboardScreen(
                             }
                         } else {
                             val previewTasks = todayTasks.take(5)
+                            val overflowCount = (todayTasks.size - previewTasks.size).coerceAtLeast(0)
                             previewTasks.forEachIndexed { index, task ->
                                 HomeTaskListRow(
                                     task = task,
@@ -490,6 +518,18 @@ fun HomeDashboardScreen(
                                 if (index < previewTasks.lastIndex) {
                                     LaRowDivider()
                                 }
+                            }
+                            if (overflowCount > 0) {
+                                LaRowDivider()
+                                Text(
+                                    text = "+$overflowCount more task${if (overflowCount == 1) "" else "s"} • Tap View all",
+                                    style = LaTheme.typography.chartMicroLabel.copy(fontWeight = FontWeight.SemiBold),
+                                    color = colors.accent,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pressScaleClickable { onNavigateToPlanning(today) }
+                                        .padding(top = 10.dp, bottom = 2.dp)
+                                )
                             }
                         }
                     }

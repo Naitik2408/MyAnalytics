@@ -497,7 +497,8 @@ fun TaskFormDialog(
         plannedTime: LocalTime?,
         estimatedMinutes: Int?,
         lifeArea: com.lifeanalytics.app.domain.model.LifeArea
-    ) -> Result<Unit>
+    ) -> Result<Unit>,
+    defaultLifeArea: com.lifeanalytics.app.domain.model.LifeArea? = null
 ) {
     val colors = LaTheme.colors
     val typography = LaTheme.typography
@@ -508,7 +509,7 @@ fun TaskFormDialog(
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
     var selectedLifeArea by rememberSaveable {
-        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialTask?.lifeArea)
+        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialTask?.lifeArea ?: defaultLifeArea)
     }
     var category by rememberSaveable { mutableStateOf(initialTask?.category ?: TaskCategory.OTHER) }
     var plannedDateIso by rememberSaveable {

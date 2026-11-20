@@ -192,7 +192,8 @@ fun LifeAnalyticsApp(
                 InsightsScreen(
                     repository = repository,
                     currencyCode = preferences.currencyCode,
-                    monthlyBudgetMinor = preferences.monthlyBudgetMinor
+                    monthlyBudgetMinor = preferences.monthlyBudgetMinor,
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
 
@@ -240,7 +241,6 @@ fun LifeAnalyticsApp(
                         habitsDateEpoch = today.toEpochDay()
                         navController.navigate("habits")
                     },
-                    onOpenActivity = { navController.navigate("activity") },
                     onOpenSettings = { navController.navigate("settings") }
                 )
             }

@@ -141,12 +141,38 @@ fun FinanceScreen(
         selectedDay
     }
 
+    val (prevRangeStart, prevRangeEnd) = remember(periodScope, selectedYearMonth, selectedDay) {
+        if (periodScope == FinancePeriodScope.MONTH) {
+            val prevYm = selectedYearMonth.minusMonths(1)
+            prevYm.atDay(1) to prevYm.atEndOfMonth()
+        } else {
+            val prevDay = selectedDay.minusDays(1)
+            prevDay to prevDay
+        }
+    }
+
     val transactionsInPeriod by remember(rangeStart, rangeEnd) {
         repository.observeTransactionsInRange(rangeStart, rangeEnd)
     }.collectAsState(initial = emptyList())
 
+    val previousTransactions by remember(prevRangeStart, prevRangeEnd) {
+        repository.observeTransactionsInRange(prevRangeStart, prevRangeEnd)
+    }.collectAsState(initial = emptyList())
+
     val summary = remember(transactionsInPeriod) {
         DomainCalculations.calculateFinancePeriodSummary(transactionsInPeriod)
+    }
+
+    val previousSummary = remember(previousTransactions) {
+        DomainCalculations.calculateFinancePeriodSummary(previousTransactions)
+    }
+
+    val expenseComparison = remember(summary.totalExpenseMinor, previousSummary.totalExpenseMinor) {
+        if (previousSummary.totalExpenseMinor > 0L) {
+            DomainCalculations.comparePeriods(summary.totalExpenseMinor, previousSummary.totalExpenseMinor)
+        } else {
+            null
+        }
     }
 
     val filteredTransactions = remember(transactionsInPeriod, typeFilter) {
@@ -355,10 +381,16 @@ fun FinanceScreen(
                     "Tap to set monthly expense budget"
                 }
 
+                val expenseComparisonSuffix = expenseComparison?.percentChange?.let { pct ->
+                    val sign = if (pct > 0) "+" else ""
+                    val prevLabel = if (periodScope == FinancePeriodScope.MONTH) "prev month" else "prev day"
+                    " • Expenses $sign$pct% vs $prevLabel"
+                } ?: ""
+
                 Column(verticalArrangement = Arrangement.spacedBy(spacing.tileGutter)) {
                     LaHeroPanel(
                         title = "Net cash flow for period",
-                        subtitle = "$netSignText • Income minus expenses (not account balance)",
+                        subtitle = "$netSignText$expenseComparisonSuffix",
                         icon = Icons.Outlined.AccountBalanceWallet,
                         containerColor = colors.tints.blue.strong
                     ) {

@@ -20,8 +20,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,6 +43,8 @@ import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
 import com.lifeanalytics.app.core.designsystem.LaCategoryPeriodSelector
 import com.lifeanalytics.app.core.designsystem.LaCompletionCountTile
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
+import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
 import com.lifeanalytics.app.core.designsystem.LaTheme
@@ -54,6 +58,7 @@ import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import com.lifeanalytics.app.feature.habits.HabitFormDialog
 import com.lifeanalytics.app.feature.planning.TaskFormDialog
 import java.time.LocalDate
+import java.time.YearMonth
 import kotlinx.coroutines.launch
 
 @Composable
@@ -67,7 +72,15 @@ fun CareerScreen(
 
     var periodWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.MONTHLY) }
     var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    var selectedTrendIdx by rememberSaveable { mutableIntStateOf(0) }
     val anchorDate = LocalDate.ofEpochDay(anchorDateEpoch)
+
+    val (periodStart, periodEnd) = remember(periodWindow, anchorDate) {
+        when (periodWindow) {
+            AnalyticsTimeWindow.WEEKLY -> DateAttributionPolicy.isoWeekRange(anchorDate)
+            else -> DateAttributionPolicy.monthRange(YearMonth.from(anchorDate))
+        }
+    }
 
     val allTasks by repository.observeAllTasks().collectAsState(initial = emptyList())
     val todayTasks by remember(today) {
@@ -110,6 +123,37 @@ fun CareerScreen(
         ).career
     }
 
+    val careerTrendSeries = remember(
+        periodWindow, anchorDate, today, allHabits, allCompletions, allTasks
+    ) {
+        LifeAnalyticsEngine.buildCategoryTrendSeries(
+            lifeArea = LifeArea.CAREER_PRODUCTIVITY,
+            window = periodWindow,
+            anchorDate = anchorDate,
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks
+        )
+    }
+
+    LaunchedEffect(careerTrendSeries) {
+        val lastScored = careerTrendSeries.indexOfLast { it.overallScore != null }
+        if (lastScored >= 0) selectedTrendIdx = lastScored
+    }
+
+    val periodHabitBreakdown = remember(careerHabits, allCompletions, periodStart, periodEnd, today) {
+        DomainCalculations.calculateHabitPeriodConsistency(
+            habits = careerHabits,
+            completions = allCompletions,
+            startDate = periodStart,
+            endDate = periodEnd,
+            today = today
+        ).perHabitConsistency
+            .filter { it.totalDueOccurrences > 0 }
+            .sortedBy { it.consistencyPercent ?: 101 }
+    }
+
     var showAddTaskDialog by rememberSaveable { mutableStateOf(false) }
     var showAddHabitDialog by rememberSaveable { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -135,7 +179,7 @@ fun CareerScreen(
             item {
                 LaScreenHeader(
                     title = "Career & Productivity",
-                    subtitle = "Tasks, learning habits, skill-building, and focus."
+                    subtitle = "Tasks, learning habits, and skill-building progress."
                 )
             }
 
@@ -158,7 +202,7 @@ fun CareerScreen(
                 }
             }
 
-            // Paired Summary Cards: Career Tasks & Career Habits (same template as Health Page)
+            // Paired Summary Cards: Career Tasks & Career Habits
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -191,6 +235,57 @@ fun CareerScreen(
                         LaActionSpec("Add task", { showAddTaskDialog = true })
                     )
                 )
+            }
+
+            // Career Progress Trend (same visual chart system in blue tint)
+            if (careerTrendSeries.any { it.overallScore != null }) {
+                item {
+                    val safeIdx = selectedTrendIdx.coerceIn(0, (careerTrendSeries.size - 1).coerceAtLeast(0))
+                    val selectedPt = careerTrendSeries.getOrNull(safeIdx)
+                    val subtitle = if (selectedPt?.overallScore != null) {
+                        "${selectedPt.label} • ${selectedPt.overallScore}/100"
+                    } else {
+                        "Career output & learning trend"
+                    }
+                    LaContainerPanel(
+                        title = "Career progress trend",
+                        subtitle = subtitle
+                    ) {
+                        LaPerformanceLineChart(
+                            points = careerTrendSeries,
+                            selectedIndex = safeIdx,
+                            onSelectIndex = { selectedTrendIdx = it },
+                            tint = colors.tints.blue,
+                            emptyMessage = "No career performance data in these intervals.",
+                            accessibilitySummary = "Career progress trend chart."
+                        )
+                    }
+                }
+            }
+
+            // Per-Habit Learning Consistency Breakdown
+            if (periodHabitBreakdown.isNotEmpty()) {
+                item {
+                    LaContainerPanel(
+                        title = "Learning habit consistency",
+                        subtitle = "Scheduled completions in selected period"
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            periodHabitBreakdown.forEach { item ->
+                                val ratio = if (item.totalDueOccurrences > 0) {
+                                    item.completedDueOccurrences.toFloat() / item.totalDueOccurrences.toFloat()
+                                } else 0f
+                                val pctText = item.consistencyPercent?.let { " ($it%)" } ?: ""
+                                LaHorizontalTrackBar(
+                                    label = item.habit.name,
+                                    valueText = "${item.completedDueOccurrences}/${item.totalDueOccurrences}$pctText",
+                                    progress = ratio,
+                                    tint = colors.tints.blue
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // Today's Career Tasks
@@ -265,7 +360,7 @@ fun CareerScreen(
                 }
             }
 
-            // Today's Learning & Career Habits (Skill-building, Reading, English speaking)
+            // Today's Learning & Career Habits
             item {
                 LaContainerPanel(
                     title = "Learning & productivity habits",
@@ -375,7 +470,8 @@ fun CareerScreen(
                     scope.launch { snackbarHostState.showSnackbar("Task saved") }
                 }
                 result.map { }
-            }
+            },
+            defaultLifeArea = LifeArea.CAREER_PRODUCTIVITY
         )
     }
 
@@ -398,7 +494,8 @@ fun CareerScreen(
                 }
             },
             onDeactivate = null,
-            onRequestDelete = null
+            onRequestDelete = null,
+            defaultLifeArea = LifeArea.CAREER_PRODUCTIVITY
         )
     }
 }

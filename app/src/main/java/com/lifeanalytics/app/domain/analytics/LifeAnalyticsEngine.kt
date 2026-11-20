@@ -568,6 +568,43 @@ object LifeAnalyticsEngine {
     }
 
     /**
+     * Projects [buildPerformanceTrendSeries] onto a single [LifeArea] so domain screens
+     * (Health, Career, Finance) can render their own trajectory in [LaPerformanceLineChart]
+     * without duplicating bucket logic or inventing zero values for missing intervals.
+     */
+    fun buildCategoryTrendSeries(
+        lifeArea: LifeArea,
+        window: AnalyticsTimeWindow,
+        anchorDate: LocalDate,
+        today: LocalDate,
+        habits: List<Habit>,
+        completions: List<HabitCompletion>,
+        tasks: List<Task>,
+        sessions: List<FocusSession> = emptyList(),
+        transactions: List<FinanceTransaction> = emptyList(),
+        monthlyBudgetMinor: Long? = null
+    ): List<PerformanceTrendPoint> {
+        return buildPerformanceTrendSeries(
+            window = window,
+            anchorDate = anchorDate,
+            today = today,
+            habits = habits,
+            completions = completions,
+            tasks = tasks,
+            sessions = sessions,
+            transactions = transactions,
+            monthlyBudgetMinor = monthlyBudgetMinor
+        ).map { point ->
+            val areaScore = when (lifeArea) {
+                LifeArea.HEALTH_LIFESTYLE -> point.healthScore
+                LifeArea.CAREER_PRODUCTIVITY -> point.careerScore
+                LifeArea.FINANCE_WEALTH -> point.financeScore
+            }
+            point.copy(overallScore = areaScore)
+        }
+    }
+
+    /**
      * Builds the 365-Day (or 366-Day in leap years) Year Calendar View (`docs/04_HOME_DASHBOARD.md`
      * & `docs/09_LIFE_ANALYTICS.md` 19 Nov 2026 update):
      * - One dot/cell per calendar day of [year].

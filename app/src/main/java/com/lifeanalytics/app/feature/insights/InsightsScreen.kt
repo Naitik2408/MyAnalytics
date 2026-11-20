@@ -90,7 +90,8 @@ enum class InsightsPeriodType(val label: String) {
 fun InsightsScreen(
     repository: LifeAnalyticsRepository,
     currencyCode: String,
-    monthlyBudgetMinor: Long? = null
+    monthlyBudgetMinor: Long? = null,
+    onNavigateBack: (() -> Unit)? = null
 ) {
     val today = remember { DateAttributionPolicy.todayLocalDate() }
     var periodType by rememberSaveable { mutableStateOf(InsightsPeriodType.MONTHLY) }
@@ -455,7 +456,8 @@ fun InsightsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 LaScreenHeader(
                     title = "Insights",
-                    subtitle = "Life scores, trends, and category breakdowns"
+                    subtitle = "Life scores, trends, and category breakdowns",
+                    onNavigateBack = onNavigateBack
                 )
 
                 LaSegmentedControl(

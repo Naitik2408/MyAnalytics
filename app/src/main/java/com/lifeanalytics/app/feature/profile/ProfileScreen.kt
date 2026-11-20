@@ -67,7 +67,6 @@ fun ProfileScreen(
     onOpenInsights: () -> Unit,
     onOpenTasks: () -> Unit,
     onOpenHabits: () -> Unit,
-    onOpenActivity: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val colors = LaTheme.colors
@@ -147,8 +146,6 @@ fun ProfileScreen(
                     ProfileNavRow(Icons.AutoMirrored.Outlined.EventNote, "Tasks planner", colors.tints.mint.base, onOpenTasks)
                     LaRowDivider()
                     ProfileNavRow(Icons.Outlined.Repeat, "Habits", colors.tints.butter.base, onOpenHabits)
-                    LaRowDivider()
-                    ProfileNavRow(Icons.Outlined.History, "Activity history", colors.tints.rose.base, onOpenActivity)
                     LaRowDivider()
                     ProfileNavRow(Icons.Outlined.Settings, "Settings", colors.surfaceVariant, onOpenSettings)
                 }

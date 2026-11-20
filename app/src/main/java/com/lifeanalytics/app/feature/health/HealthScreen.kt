@@ -3,6 +3,7 @@ package com.lifeanalytics.app.feature.health
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,8 +20,10 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,6 +43,8 @@ import com.lifeanalytics.app.core.designsystem.LaAnimatedCheckbox
 import com.lifeanalytics.app.core.designsystem.LaCategoryPeriodSelector
 import com.lifeanalytics.app.core.designsystem.LaCompletionCountTile
 import com.lifeanalytics.app.core.designsystem.LaContainerPanel
+import com.lifeanalytics.app.core.designsystem.LaHorizontalTrackBar
+import com.lifeanalytics.app.core.designsystem.LaPerformanceLineChart
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
 import com.lifeanalytics.app.core.designsystem.LaTheme
@@ -53,6 +58,7 @@ import com.lifeanalytics.app.domain.usecase.DomainCalculations
 import com.lifeanalytics.app.feature.habits.HabitFormDialog
 import com.lifeanalytics.app.feature.planning.TaskFormDialog
 import java.time.LocalDate
+import java.time.YearMonth
 import kotlinx.coroutines.launch
 
 @Composable
@@ -66,7 +72,15 @@ fun HealthScreen(
 
     var periodWindow by rememberSaveable { mutableStateOf(AnalyticsTimeWindow.MONTHLY) }
     var anchorDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
+    var selectedTrendIdx by rememberSaveable { mutableIntStateOf(0) }
     val anchorDate = LocalDate.ofEpochDay(anchorDateEpoch)
+
+    val (periodStart, periodEnd) = remember(periodWindow, anchorDate) {
+        when (periodWindow) {
+            AnalyticsTimeWindow.WEEKLY -> DateAttributionPolicy.isoWeekRange(anchorDate)
+            else -> DateAttributionPolicy.monthRange(YearMonth.from(anchorDate))
+        }
+    }
 
     val allHabits by repository.observeAllHabits().collectAsState(initial = emptyList())
     val todayCompletions by remember(today) {
@@ -107,6 +121,38 @@ fun HealthScreen(
             monthlyBudgetMinor = null,
             computeComparison = false
         ).health
+    }
+
+    val healthTrendSeries = remember(
+        periodWindow, anchorDate, today, allHabits, allCompletions, allTasks
+    ) {
+        LifeAnalyticsEngine.buildCategoryTrendSeries(
+            lifeArea = LifeArea.HEALTH_LIFESTYLE,
+            window = periodWindow,
+            anchorDate = anchorDate,
+            today = today,
+            habits = allHabits,
+            completions = allCompletions,
+            tasks = allTasks
+        )
+    }
+
+    LaunchedEffect(healthTrendSeries) {
+        val lastScored = healthTrendSeries.indexOfLast { it.overallScore != null }
+        if (lastScored >= 0) selectedTrendIdx = lastScored
+    }
+
+    // Per-habit scheduled consistency for the selected period (sorted lowest-first so slipping habits stand out)
+    val periodHabitBreakdown = remember(healthHabits, allCompletions, periodStart, periodEnd, today) {
+        DomainCalculations.calculateHabitPeriodConsistency(
+            habits = healthHabits,
+            completions = allCompletions,
+            startDate = periodStart,
+            endDate = periodEnd,
+            today = today
+        ).perHabitConsistency
+            .filter { it.totalDueOccurrences > 0 }
+            .sortedBy { it.consistencyPercent ?: 101 }
     }
 
     var showAddHabitDialog by rememberSaveable { mutableStateOf(false) }
@@ -157,7 +203,7 @@ fun HealthScreen(
                 }
             }
 
-            // Paired Summary Cards: Health Tasks & Health Habits (matching Finance summary card language)
+            // Paired Summary Cards: Health Tasks & Health Habits
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -190,6 +236,57 @@ fun HealthScreen(
                         LaActionSpec("Add task", { showAddTaskDialog = true })
                     )
                 )
+            }
+
+            // Health Consistency Trend (same visual chart system in mint tint)
+            if (healthTrendSeries.any { it.overallScore != null }) {
+                item {
+                    val safeIdx = selectedTrendIdx.coerceIn(0, (healthTrendSeries.size - 1).coerceAtLeast(0))
+                    val selectedPt = healthTrendSeries.getOrNull(safeIdx)
+                    val subtitle = if (selectedPt?.overallScore != null) {
+                        "${selectedPt.label} • ${selectedPt.overallScore}% adherence"
+                    } else {
+                        "Health habit adherence over time"
+                    }
+                    LaContainerPanel(
+                        title = "Health consistency trend",
+                        subtitle = subtitle
+                    ) {
+                        LaPerformanceLineChart(
+                            points = healthTrendSeries,
+                            selectedIndex = safeIdx,
+                            onSelectIndex = { selectedTrendIdx = it },
+                            tint = colors.tints.mint,
+                            emptyMessage = "No health adherence data in these intervals.",
+                            accessibilitySummary = "Health consistency trend chart."
+                        )
+                    }
+                }
+            }
+
+            // Per-Habit Consistency Breakdown (spots slipping routines without duplicating CRUD lists)
+            if (periodHabitBreakdown.isNotEmpty()) {
+                item {
+                    LaContainerPanel(
+                        title = "Routine adherence",
+                        subtitle = "Scheduled completions in selected period"
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            periodHabitBreakdown.forEach { item ->
+                                val ratio = if (item.totalDueOccurrences > 0) {
+                                    item.completedDueOccurrences.toFloat() / item.totalDueOccurrences.toFloat()
+                                } else 0f
+                                val pctText = item.consistencyPercent?.let { " ($it%)" } ?: ""
+                                LaHorizontalTrackBar(
+                                    label = item.habit.name,
+                                    valueText = "${item.completedDueOccurrences}/${item.totalDueOccurrences}$pctText",
+                                    progress = ratio,
+                                    tint = colors.tints.mint
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // Today's Scheduled Health Habits
@@ -348,7 +445,8 @@ fun HealthScreen(
                 }
             },
             onDeactivate = null,
-            onRequestDelete = null
+            onRequestDelete = null,
+            defaultLifeArea = LifeArea.HEALTH_LIFESTYLE
         )
     }
 
@@ -371,7 +469,8 @@ fun HealthScreen(
                     scope.launch { snackbarHostState.showSnackbar("Task saved") }
                 }
                 result.map { }
-            }
+            },
+            defaultLifeArea = LifeArea.HEALTH_LIFESTYLE
         )
     }
 }

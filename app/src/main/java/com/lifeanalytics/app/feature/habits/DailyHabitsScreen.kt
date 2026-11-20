@@ -635,7 +635,8 @@ fun HabitFormDialog(
     onDismiss: () -> Unit,
     onSave: (name: String, weekdays: Set<DayOfWeek>, lifeArea: com.lifeanalytics.app.domain.model.LifeArea) -> Unit,
     onDeactivate: (() -> Unit)?,
-    onRequestDelete: (() -> Unit)?
+    onRequestDelete: (() -> Unit)?,
+    defaultLifeArea: com.lifeanalytics.app.domain.model.LifeArea? = null
 ) {
     val colors = LaTheme.colors
     val typography = LaTheme.typography
@@ -647,7 +648,7 @@ fun HabitFormDialog(
         ?: initialHabit?.schedulePeriods?.lastOrNull()
     var name by rememberSaveable { mutableStateOf(initialHabit?.name ?: "") }
     var selectedLifeArea by rememberSaveable {
-        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialHabit?.lifeArea)
+        mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialHabit?.lifeArea ?: defaultLifeArea)
     }
     var selectedDays by remember {
         mutableStateOf(
