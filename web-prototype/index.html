@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Life Analytics — Web Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-800 min-h-screen flex flex-col items-center justify-center p-2 sm:p-6 selection:bg-[#5C45EE] selection:text-white">
+
+  <!-- Laptop Toolbar / Controls Header -->
+  <header class="w-full max-w-4xl mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-slate-800/80 backdrop-blur-md rounded-2xl border border-slate-700/60 text-white shadow-lg">
+    <div class="flex items-center gap-2.5">
+      <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span class="text-xs sm:text-sm font-bold tracking-tight">Life Analytics Web Prototype</span>
+      <span class="text-[10px] bg-[#5C45EE] text-white px-2 py-0.5 rounded-full font-semibold">Isolated Sandbox</span>
+    </div>
+
+    <div class="flex items-center gap-2 text-xs">
+      <button onclick="resetPrototypeData()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition-colors">
+        ↻ Reset Sample Data
+      </button>
+      <button onclick="togglePhoneFrame()" id="frameToggleBtn" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 transition-colors">
+        Mobile Frame: On
+      </button>
+    </div>
+  </header>
+
+  <!-- Mobile Device Shell / Wrapper -->
+  <div id="deviceContainer" class="w-[390px] h-[844px] bg-[#F7F6FD] rounded-[44px] shadow-2xl border-[8px] border-slate-800 flex flex-col overflow-hidden relative transition-all duration-300">
+    
+    <!-- Status Bar -->
+    <div class="pt-3 px-7 flex justify-between items-center text-xs font-semibold text-slate-800 select-none bg-[#F7F6FD] z-10">
+      <span id="statusBarTime">23:41</span>
+      <!-- Dynamic Island pill -->
+      <div class="w-24 h-5 bg-black rounded-full flex items-center justify-center">
+        <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 18.25A10.97 10.97 0 0 1 1 12C1 5.92 5.92 1 12 1s11 4.92 11 11c0 2.45-.8 4.71-2.16 6.54l-.62-.62A9.97 9.97 0 0 0 21 12c0-4.97-4.03-9-9-9z"/><path d="M12 7c-2.76 0-5 2.24-5 5 0 1.25.46 2.4 1.22 3.28l.71-.71A3.96 3.96 0 0 1 8 12c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .93-.32 1.79-.86 2.47l.71.71A4.96 4.96 0 0 0 17 12c0-2.76-2.24-5-5-5z"/></svg>
+        <span class="text-[10px] bg-slate-200 px-1 rounded font-bold">5G</span>
+        <div class="w-5 h-2.5 border border-slate-700 rounded-sm p-0.5 flex items-center">
+          <div class="h-full w-3/4 bg-slate-800 rounded-2xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Screen Viewport (Scrollable) -->
+    <div id="screenViewport" class="flex-1 overflow-y-auto custom-scroll px-4 pt-3 pb-24 space-y-3.5">
+      <!-- Screen content dynamically rendered via JavaScript -->
+    </div>
+
+    <!-- Bottom Navigation Bar (4 Pillars: Home, Health, Career, Finance) -->
+    <nav class="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-6 py-2.5 flex justify-between items-center z-20 shadow-lg">
+      
+      <!-- Home Tab -->
+      <button onclick="switchTab('home')" id="tab-home" class="tab-btn flex flex-col items-center gap-0.5 group">
+        <div class="tab-icon w-12 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center transition-all">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        </div>
+        <span class="tab-label text-[10px] font-bold text-slate-900">Home</span>
+      </button>
+
+      <!-- Health Tab -->
+      <button onclick="switchTab('health')" id="tab-health" class="tab-btn flex flex-col items-center gap-0.5 group">
+        <div class="tab-icon w-10 h-7 flex items-center justify-center text-slate-400 group-hover:text-slate-700 transition-all">
+          <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+        </div>
+        <span class="tab-label text-[10px] font-medium text-slate-400 group-hover:text-slate-700">Health</span>
+      </button>
+
+      <!-- Career Tab -->
+      <button onclick="switchTab('career')" id="tab-career" class="tab-btn flex flex-col items-center gap-0.5 group">
+        <div class="tab-icon w-10 h-7 flex items-center justify-center text-slate-400 group-hover:text-slate-700 transition-all">
+          <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </div>
+        <span class="tab-label text-[10px] font-medium text-slate-400 group-hover:text-slate-700">Career</span>
+      </button>
+
+      <!-- Finance Tab -->
+      <button onclick="switchTab('finance')" id="tab-finance" class="tab-btn flex flex-col items-center gap-0.5 group">
+        <div class="tab-icon w-10 h-7 flex items-center justify-center text-slate-400 group-hover:text-slate-700 transition-all">
+          <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+        </div>
+        <span class="tab-label text-[10px] font-medium text-slate-400 group-hover:text-slate-700">Finance</span>
+      </button>
+
+    </nav>
+
+    <!-- Modal Dialog (Add task / Add habit / Add expense) -->
+    <div id="modalOverlay" class="hidden absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-30 flex items-end justify-center transition-all">
+      <div id="modalCard" class="w-full bg-white rounded-t-3xl p-5 shadow-2xl border-t border-slate-100 max-h-[85%] overflow-y-auto space-y-4">
+        <!-- Injected via openModal() -->
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden absolute top-14 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-xs px-4 py-2 rounded-full shadow-lg z-40 flex items-center gap-2">
+      <span id="toastMsg">Action completed</span>
+    </div>
+
+  </div>
+
+  <!-- Client-side Interactive Application Logic -->
+  <script>
+    // State Management
+    let currentTab = 'home';
+    let isMobileFramed = true;
+
+    const initialHabits = [
+      { id: 'h1', name: '2L Water', area: 'Health', completed: true },
+      { id: 'h2', name: '5k steps', area: 'Health', completed: true },
+      { id: 'h3', name: 'Morning Cold Shower', area: 'Health', completed: false },
+      { id: 'h4', name: 'Min 7 hours sleep', area: 'Health', completed: false },
+      { id: 'h5', name: 'Read 20 mins', area: 'Career', completed: true },
+      { id: 'h6', name: 'English speaking practice', area: 'Career', completed: false },
+    ];
+
+    const initialTasks = [
+      { id: 't1', title: 'Complete project architecture document', area: 'Career', category: 'Work', completed: true },
+      { id: 't2', title: 'Review monthly savings and expenses', area: 'Finance', category: 'Personal', completed: false },
+      { id: 't3', title: 'Practice 2 algorithm design problems', area: 'Career', category: 'Study', completed: false },
+    ];
+
+    const initialExpenses = [
+      { id: 'e1', title: 'Grocery & Organic Market', amount: 3200, category: 'Food', type: 'Expense' },
+      { id: 'e2', title: 'Gym & Fitness Membership', amount: 2500, category: 'Health', type: 'Expense' },
+      { id: 'e3', title: 'Broadband & Cloud Hosting', amount: 1499, category: 'Utilities', type: 'Expense' },
+      { id: 'e4', title: 'Client Consulting Retainer', amount: 85000, category: 'Income', type: 'Income' },
+    ];
+
+    let habits = JSON.parse(localStorage.getItem('la_habits')) || initialHabits;
+    let tasks = JSON.parse(localStorage.getItem('la_tasks')) || initialTasks;
+    let expenses = JSON.parse(localStorage.getItem('la_expenses')) || initialExpenses;
+
+    function saveState() {
+      localStorage.setItem('la_habits', JSON.stringify(habits));
+      localStorage.setItem('la_tasks', JSON.stringify(tasks));
+      localStorage.setItem('la_expenses', JSON.stringify(expenses));
+    }
+
+    function resetPrototypeData() {
+      habits = JSON.parse(JSON.stringify(initialHabits));
+      tasks = JSON.parse(JSON.stringify(initialTasks));
+      expenses = JSON.parse(JSON.stringify(initialExpenses));
+      saveState();
+      renderCurrentScreen();
+      showToast('Sample data reset to default');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      toastMsg.innerText = msg;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 2200);
+    }
+
+    function togglePhoneFrame() {
+      const container = document.getElementById('deviceContainer');
+      const btn = document.getElementById('frameToggleBtn');
+      isMobileFramed = !isMobileFramed;
+      if (isMobileFramed) {
+        container.className = "w-[390px] h-[844px] bg-[#F7F6FD] rounded-[44px] shadow-2xl border-[8px] border-slate-800 flex flex-col overflow-hidden relative transition-all duration-300";
+        btn.innerText = "Mobile Frame: On";
+      } else {
+        container.className = "w-full max-w-xl h-[860px] bg-[#F7F6FD] rounded-2xl shadow-xl border border-slate-300 flex flex-col overflow-hidden relative transition-all duration-300";
+        btn.innerText = "Mobile Frame: Expanded";
+      }
+    }
+
+    function switchTab(tab) {
+      currentTab = tab;
+      
+      // Update Tab bar UI
+      ['home', 'health', 'career', 'finance'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        const iconDiv = btn.querySelector('.tab-icon');
+        const label = btn.querySelector('.tab-label');
+
+        if (t === tab) {
+          iconDiv.className = "tab-icon w-12 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center transition-all shadow-xs";
+          label.className = "tab-label text-[10px] font-bold text-slate-900";
+        } else {
+          iconDiv.className = "tab-icon w-10 h-7 flex items-center justify-center text-slate-400 group-hover:text-slate-700 transition-all";
+          label.className = "tab-label text-[10px] font-medium text-slate-400 group-hover:text-slate-700";
+        }
+      });
+
+      renderCurrentScreen();
+    }
+
+    function toggleHabit(id) {
+      const h = habits.find(x => x.id === id);
+      if (h) {
+        h.completed = !h.completed;
+        saveState();
+        renderCurrentScreen();
+        showToast(h.completed ? `Checked: ${h.name}` : `Unchecked: ${h.name}`);
+      }
+    }
+
+    function toggleTask(id) {
+      const t = tasks.find(x => x.id === id);
+      if (t) {
+        t.completed = !t.completed;
+        saveState();
+        renderCurrentScreen();
+        showToast(t.completed ? `Completed: ${t.title}` : `Reopened: ${t.title}`);
+      }
+    }
+
+    // Modal Operations
+    function openModal(type) {
+      const overlay = document.getElementById('modalOverlay');
+      const card = document.getElementById('modalCard');
+
+      if (type === 'task') {
+        card.innerHTML = `
+          <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-900">+ Add New Task</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">&times;</button>
+          </div>
+          <div class="space-y-3 pt-1">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Task Title</label>
+              <input id="newInputTitle" type="text" placeholder="e.g. Finish quarterly presentation" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE]" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Life Area</label>
+              <select id="newInputArea" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE] bg-white">
+                <option value="Career">Career & Productivity</option>
+                <option value="Health">Health & Lifestyle</option>
+                <option value="Finance">Finance & Wealth</option>
+              </select>
+            </div>
+            <button onclick="submitNewTask()" class="w-full py-2.5 bg-[#5C45EE] text-white rounded-full text-xs font-bold shadow-md hover:bg-[#4d36db] transition-colors">
+              Save Task
+            </button>
+          </div>
+        `;
+      } else if (type === 'habit') {
+        card.innerHTML = `
+          <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-900">+ Add New Habit</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">&times;</button>
+          </div>
+          <div class="space-y-3 pt-1">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Habit Name</label>
+              <input id="newInputTitle" type="text" placeholder="e.g. 10 minutes meditation" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE]" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Life Area</label>
+              <select id="newInputArea" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE] bg-white">
+                <option value="Health">Health & Lifestyle</option>
+                <option value="Career">Career & Productivity</option>
+                <option value="Finance">Finance & Wealth</option>
+              </select>
+            </div>
+            <button onclick="submitNewHabit()" class="w-full py-2.5 bg-[#5C45EE] text-white rounded-full text-xs font-bold shadow-md hover:bg-[#4d36db] transition-colors">
+              Save Habit
+            </button>
+          </div>
+        `;
+      } else if (type === 'expense') {
+        card.innerHTML = `
+          <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+            <h3 class="text-sm font-bold text-slate-900">+ Add Expense / Income</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 font-bold text-lg">&times;</button>
+          </div>
+          <div class="space-y-3 pt-1">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Description</label>
+              <input id="newInputTitle" type="text" placeholder="e.g. Grocery store, Coffee" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE]" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-slate-600 block mb-1">Amount (₹)</label>
+              <input id="newInputAmount" type="number" placeholder="500" class="w-full text-xs p-2.5 rounded-xl border border-slate-200 focus:outline-[#5C45EE]" />
+            </div>
+            <button onclick="submitNewExpense()" class="w-full py-2.5 bg-[#5C45EE] text-white rounded-full text-xs font-bold shadow-md hover:bg-[#4d36db] transition-colors">
+              Save Transaction
+            </button>
+          </div>
+        `;
+      }
+
+      overlay.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.add('hidden');
+    }
+
+    function submitNewTask() {
+      const title = document.getElementById('newInputTitle').value.trim();
+      const area = document.getElementById('newInputArea').value;
+      if (!title) return;
+      tasks.unshift({
+        id: 't_' + Date.now(),
+        title: title,
+        area: area,
+        category: 'Personal',
+        completed: false
+      });
+      saveState();
+      closeModal();
+      renderCurrentScreen();
+      showToast('Task added successfully');
+    }
+
+    function submitNewHabit() {
+      const title = document.getElementById('newInputTitle').value.trim();
+      const area = document.getElementById('newInputArea').value;
+      if (!title) return;
+      habits.unshift({
+        id: 'h_' + Date.now(),
+        name: title,
+        area: area,
+        completed: false
+      });
+      saveState();
+      closeModal();
+      renderCurrentScreen();
+      showToast('Habit added successfully');
+    }
+
+    function submitNewExpense() {
+      const title = document.getElementById('newInputTitle').value.trim();
+      const amt = parseFloat(document.getElementById('newInputAmount').value);
+      if (!title || isNaN(amt)) return;
+      expenses.unshift({
+        id: 'e_' + Date.now(),
+        title: title,
+        amount: amt,
+        category: 'Expense',
+        type: 'Expense'
+      });
+      saveState();
+      closeModal();
+      renderCurrentScreen();
+      showToast('Expense added successfully');
+    }
+
+    // Render Views
+    function renderCurrentScreen() {
+      const vp = document.getElementById('screenViewport');
+      if (currentTab === 'home') {
+        renderHomeScreen(vp);
+      } else if (currentTab === 'health') {
+        renderHealthScreen(vp);
+      } else if (currentTab === 'career') {
+        renderCareerScreen(vp);
+      } else if (currentTab === 'finance') {
+        renderFinanceScreen(vp);
+      }
+    }
+
+    function renderHomeScreen(vp) {
+      const completedHabitsCount = habits.filter(h => h.completed).length;
+      const totalHabitsCount = habits.length;
+
+      const completedTasksCount = tasks.filter(t => t.completed).length;
+      const totalTasksCount = tasks.length;
+
+      vp.innerHTML = `
+        <!-- Header -->
+        <div class="flex justify-between items-center pt-1">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-[#E4E1F8] flex items-center justify-center text-[#5540E0]">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            </div>
+            <div>
+              <h1 class="text-lg font-bold text-slate-900 leading-tight">Hello</h1>
+              <p class="text-[11px] text-slate-500 font-medium">Thursday, 19 November 2026</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="showToast('Daily Review')" class="w-9 h-9 rounded-full bg-white shadow-xs border border-slate-200/80 flex items-center justify-center text-slate-700 active:scale-90 transition-transform">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            </button>
+            <button onclick="showToast('Settings')" class="w-9 h-9 rounded-full bg-white shadow-xs border border-slate-200/80 flex items-center justify-center text-slate-700 active:scale-90 transition-transform">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Weekly Calendar Strip -->
+        <div class="grid grid-cols-7 gap-1.5 pt-1">
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Mon</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">16</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Tue</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">17</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Wed</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">18</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-[#5C45EE] text-white shadow-md shadow-[#5C45EE]/30">
+            <span class="text-[10px] font-medium opacity-90">Thu</span>
+            <span class="text-xs font-extrabold mt-0.5">19</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Fri</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">20</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Sat</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">21</span>
+          </div>
+          <div class="flex flex-col items-center py-2 rounded-2xl bg-white/70 border border-slate-200/50">
+            <span class="text-[10px] text-slate-400 font-medium">Sun</span>
+            <span class="text-xs font-bold text-slate-700 mt-0.5">22</span>
+          </div>
+        </div>
+
+        <!-- Section 1: 365-Day Performance Heatmap -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <div class="flex justify-between items-start mb-1.5">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">2026 performance</h2>
+              <p class="text-[10px] text-slate-500">29 scored · 294 no data · Avg 70/100</p>
+            </div>
+            <span class="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">323 / 365 days</span>
+          </div>
+
+          <!-- Heatmap Grid Simulation (16 cols x 7 rows) -->
+          <div class="grid grid-cols-16 gap-1 my-2.5 p-2 bg-[#FAF9FF] rounded-2xl border border-slate-100">
+            ${Array(112).fill(0).map((_, i) => {
+              if (i >= 85 && i <= 90) return '<div class="w-2.5 h-2.5 rounded-[3px] bg-[#2E2759]"></div>';
+              if (i > 65 && i % 3 === 0) return '<div class="w-2.5 h-2.5 rounded-[3px] bg-[#8979F7]"></div>';
+              if (i > 50 && i % 4 === 0) return '<div class="w-2.5 h-2.5 rounded-[3px] bg-[#CEC6FB]"></div>';
+              if (i > 95) return '<div class="w-2.5 h-2.5 rounded-[3px] bg-slate-200/60"></div>';
+              return '<div class="w-2.5 h-2.5 rounded-[3px] border border-slate-300/80 bg-white"></div>';
+            }).join('')}
+          </div>
+
+          <!-- Legend -->
+          <div class="flex items-center justify-between text-[9px] text-slate-500 pt-1">
+            <div class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-[2px] border border-slate-300"></span>
+              <span>No score</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="w-2 h-2 rounded-[2px] bg-slate-200"></span>
+              <span>Future</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span>Score</span>
+              <span class="w-2 h-2 rounded-[2px] bg-[#CEC6FB]"></span>
+              <span class="w-2 h-2 rounded-[2px] bg-[#8979F7]"></span>
+              <span class="w-2 h-2 rounded-[2px] bg-[#2E2759]"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Prominent Quick Action Buttons (Relocated below Heatmap, matching 4th image) -->
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="openModal('task')" class="flex items-center justify-center gap-1 py-3 px-1.5 bg-white rounded-full border border-slate-200/90 shadow-xs active:scale-95 transition-all text-slate-800 font-semibold text-xs hover:border-[#5C45EE]/40">
+            <svg class="w-3.5 h-3.5 text-[#5C45EE]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Add task</span>
+          </button>
+
+          <button onclick="openModal('habit')" class="flex items-center justify-center gap-1 py-3 px-1.5 bg-white rounded-full border border-slate-200/90 shadow-xs active:scale-95 transition-all text-slate-800 font-semibold text-xs hover:border-[#5C45EE]/40">
+            <svg class="w-3.5 h-3.5 text-[#5C45EE]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Add habit</span>
+          </button>
+
+          <button onclick="openModal('expense')" class="flex items-center justify-center gap-1 py-3 px-1.5 bg-white rounded-full border border-slate-200/90 shadow-xs active:scale-95 transition-all text-slate-800 font-semibold text-xs hover:border-[#5C45EE]/40">
+            <svg class="w-3.5 h-3.5 text-[#5C45EE]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Add expense</span>
+          </button>
+        </div>
+
+        <!-- Section 3: Single Streamlined Performance Trend Graph -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <div class="flex justify-between items-center mb-1">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Performance trend</h2>
+              <p class="text-[10px] text-slate-500">6-month growth trajectory</p>
+            </div>
+            <button onclick="showToast('Insights View')" class="text-xs font-semibold text-[#5C45EE] hover:underline">Insights</button>
+          </div>
+
+          <!-- Clean Smooth SVG Wave -->
+          <div class="h-24 w-full mt-2 relative">
+            <svg class="w-full h-full overflow-visible" viewBox="0 0 320 80" fill="none">
+              <defs>
+                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#8979F7" stop-opacity="0.3"/>
+                  <stop offset="100%" stop-color="#8979F7" stop-opacity="0.0"/>
+                </linearGradient>
+              </defs>
+              <path d="M 10 65 Q 70 55, 130 48 T 240 28 T 310 18 L 310 80 L 10 80 Z" fill="url(#trendGradient)" />
+              <path d="M 10 65 Q 70 55, 130 48 T 240 28 T 310 18" stroke="#5C45EE" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="310" cy="18" r="4.5" fill="#2E2759" stroke="#FFFFFF" stroke-width="2"/>
+            </svg>
+          </div>
+
+          <!-- Month Axis -->
+          <div class="flex justify-between text-[10px] font-medium text-slate-400 px-2">
+            <span>Jun</span>
+            <span>Jul</span>
+            <span>Aug</span>
+            <span>Sep</span>
+            <span class="font-bold text-slate-900">Oct</span>
+          </div>
+        </div>
+
+        <!-- Section 4: Today's Tasks (Matching Image 5) -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <div class="flex justify-between items-center mb-2.5">
+            <h2 class="text-sm font-bold text-slate-900">Today's tasks</h2>
+            <button onclick="showToast('Opening Planning')" class="text-xs font-semibold text-[#5C45EE] hover:underline">View all</button>
+          </div>
+
+          ${tasks.length === 0 ? `
+            <div class="flex items-center gap-3 py-2">
+              <div class="w-10 h-10 rounded-full bg-[#EAE7FD] flex items-center justify-center text-[#5C45EE]">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-slate-900">No tasks planned for today</h4>
+                <p class="text-[10px] text-slate-500">Add your key tasks for today to keep your plan clear.</p>
+              </div>
+            </div>
+            <button onclick="openModal('task')" class="mt-2 px-4 py-1.5 bg-[#EAE7FD] text-[#5C45EE] rounded-full text-xs font-bold">Add task</button>
+          ` : `
+            <div class="space-y-2">
+              ${tasks.map(t => `
+                <div onclick="toggleTask('${t.id}')" class="flex items-center justify-between p-2.5 rounded-2xl bg-[#FBFBFE] border border-slate-100 cursor-pointer active:scale-98 transition-transform">
+                  <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                    <input type="checkbox" ${t.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleTask('${t.id}')" class="w-4 h-4 rounded text-[#5C45EE] accent-[#5C45EE] cursor-pointer">
+                    <span class="text-xs truncate ${t.completed ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'}">${t.title}</span>
+                  </div>
+                  <span class="text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md ml-2 shrink-0">${t.area}</span>
+                </div>
+              `).join('')}
+            </div>
+          `}
+        </div>
+
+        <!-- Section 5: Today's Habits (Matching Image 5) -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <div class="flex justify-between items-center mb-1">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Today's habits</h2>
+              <p class="text-[10px] text-slate-400 font-medium">${completedHabitsCount} of ${totalHabitsCount} completed</p>
+            </div>
+            <button onclick="showToast('Opening Habits')" class="text-xs font-semibold text-[#5C45EE] hover:underline">View all</button>
+          </div>
+
+          <div class="divide-y divide-slate-100 mt-1">
+            ${habits.map(h => `
+              <div onclick="toggleHabit('${h.id}')" class="py-2.5 flex items-center justify-between cursor-pointer active:scale-98 transition-transform">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                  <input type="checkbox" ${h.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleHabit('${h.id}')" class="w-4.5 h-4.5 rounded-md text-[#5C45EE] accent-[#5C45EE] cursor-pointer">
+                  <span class="text-xs truncate ${h.completed ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'}">${h.name}</span>
+                </div>
+                <span class="text-[10px] text-[#5C45EE] bg-[#EAE7FD] px-2.5 py-0.5 rounded-full font-semibold ml-2 shrink-0">Due today</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHealthScreen(vp) {
+      const healthHabits = habits.filter(h => h.area === 'Health');
+      const healthTasks = tasks.filter(t => t.area === 'Health');
+      const doneHabits = healthHabits.filter(h => h.completed).length;
+      const score = healthHabits.length > 0 ? Math.round((doneHabits / healthHabits.length) * 100) : 0;
+
+      vp.innerHTML = `
+        <div class="pt-1">
+          <h1 class="text-lg font-bold text-slate-900">Health & Lifestyle</h1>
+          <p class="text-[11px] text-slate-500">Daily routines, wellness habits, and health adherence.</p>
+        </div>
+
+        <!-- Health Hero Panel -->
+        <div class="bg-[#DDD0F7] rounded-3xl p-5 shadow-xs">
+          <div class="flex justify-between items-center mb-2">
+            <div>
+              <p class="text-xs font-semibold text-slate-700">Health Performance</p>
+              <h2 class="text-3xl font-extrabold text-slate-900">${score} / 100</h2>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center text-[#5C45EE]">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+            </div>
+          </div>
+          <p class="text-xs text-slate-700 font-medium">${doneHabits} of ${healthHabits.length} habits completed (${score}%)</p>
+        </div>
+
+        <!-- Actions -->
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="openModal('habit')" class="py-2.5 px-3 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5 shadow-xs">
+            <span class="text-[#5C45EE]">+</span> Add habit
+          </button>
+          <button onclick="openModal('task')" class="py-2.5 px-3 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5 shadow-xs">
+            <span class="text-[#5C45EE]">+</span> Add task
+          </button>
+        </div>
+
+        <!-- Today's Health Habits -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <h3 class="text-sm font-bold text-slate-900 mb-2">Today's health habits</h3>
+          <div class="divide-y divide-slate-100">
+            ${healthHabits.map(h => `
+              <div onclick="toggleHabit('${h.id}')" class="py-2.5 flex items-center justify-between cursor-pointer">
+                <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                  <input type="checkbox" ${h.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleHabit('${h.id}')" class="w-4 h-4 rounded text-[#5C45EE] accent-[#5C45EE]">
+                  <span class="text-xs ${h.completed ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'} truncate">${h.name}</span>
+                </div>
+                <span class="text-[9px] text-[#5C45EE] bg-[#EAE7FD] px-2 py-0.5 rounded-full font-semibold">Due today</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCareerScreen(vp) {
+      const careerHabits = habits.filter(h => h.area === 'Career');
+      const careerTasks = tasks.filter(t => t.area === 'Career');
+      const doneTasks = careerTasks.filter(t => t.completed).length;
+      const doneHabits = careerHabits.filter(h => h.completed).length;
+
+      vp.innerHTML = `
+        <div class="pt-1">
+          <h1 class="text-lg font-bold text-slate-900">Career & Productivity</h1>
+          <p class="text-[11px] text-slate-500">Tasks, learning habits, skill-building, and focus.</p>
+        </div>
+
+        <!-- Career Hero Panel -->
+        <div class="bg-[#DDD0F7] rounded-3xl p-5 shadow-xs">
+          <div class="flex justify-between items-center mb-2">
+            <div>
+              <p class="text-xs font-semibold text-slate-700">Career Performance</p>
+              <h2 class="text-3xl font-extrabold text-slate-900">75 / 100</h2>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center text-[#5C45EE]">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </div>
+          </div>
+          <p class="text-xs text-slate-700 font-medium">60% Tasks (${doneTasks}/${careerTasks.length}) · 40% Learning Habits (${doneHabits}/${careerHabits.length})</p>
+        </div>
+
+        <!-- Actions -->
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="openModal('task')" class="py-2.5 px-3 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5 shadow-xs">
+            <span class="text-[#5C45EE]">+</span> Add task
+          </button>
+          <button onclick="openModal('habit')" class="py-2.5 px-3 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5 shadow-xs">
+            <span class="text-[#5C45EE]">+</span> Add habit
+          </button>
+        </div>
+
+        <!-- Career Tasks -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <h3 class="text-sm font-bold text-slate-900 mb-2">Today's career tasks</h3>
+          <div class="space-y-2">
+            ${careerTasks.map(t => `
+              <div onclick="toggleTask('${t.id}')" class="flex items-center justify-between p-2.5 rounded-2xl bg-[#FBFBFE] border border-slate-100 cursor-pointer">
+                <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                  <input type="checkbox" ${t.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleTask('${t.id}')" class="w-4 h-4 rounded text-[#5C45EE] accent-[#5C45EE]">
+                  <span class="text-xs ${t.completed ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'} truncate">${t.title}</span>
+                </div>
+                <span class="text-[9px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md ml-2 shrink-0">${t.category}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Career Habits -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <h3 class="text-sm font-bold text-slate-900 mb-2">Learning & skill habits</h3>
+          <div class="divide-y divide-slate-100">
+            ${careerHabits.map(h => `
+              <div onclick="toggleHabit('${h.id}')" class="py-2.5 flex items-center justify-between cursor-pointer">
+                <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                  <input type="checkbox" ${h.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleHabit('${h.id}')" class="w-4 h-4 rounded text-[#5C45EE] accent-[#5C45EE]">
+                  <span class="text-xs ${h.completed ? 'text-slate-400 line-through' : 'text-slate-800 font-medium'} truncate">${h.name}</span>
+                </div>
+                <span class="text-[9px] text-[#5C45EE] bg-[#EAE7FD] px-2 py-0.5 rounded-full font-semibold">Due today</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderFinanceScreen(vp) {
+      const totalExpense = expenses.filter(e => e.type === 'Expense').reduce((acc, curr) => acc + curr.amount, 0);
+      const totalIncome = expenses.filter(e => e.type === 'Income').reduce((acc, curr) => acc + curr.amount, 0);
+      const netCash = totalIncome - totalExpense;
+
+      vp.innerHTML = `
+        <div class="pt-1">
+          <h1 class="text-lg font-bold text-slate-900">Finance & Wealth</h1>
+          <p class="text-[11px] text-slate-500">Expenses, cash flow, budget adherence, and savings.</p>
+        </div>
+
+        <!-- Finance Hero Panel -->
+        <div class="bg-[#DDD0F7] rounded-3xl p-5 shadow-xs">
+          <p class="text-xs font-semibold text-slate-700">Net Cash Flow (Monthly)</p>
+          <h2 class="text-3xl font-extrabold text-slate-900">+₹${netCash.toLocaleString()}</h2>
+          <div class="flex justify-between items-center mt-3 pt-3 border-t border-slate-300/60 text-xs font-medium text-slate-700">
+            <span>Income: ₹${totalIncome.toLocaleString()}</span>
+            <span>Spent: ₹${totalExpense.toLocaleString()}</span>
+          </div>
+        </div>
+
+        <!-- Action -->
+        <button onclick="openModal('expense')" class="w-full py-2.5 bg-white rounded-full border border-slate-200 text-xs font-bold text-slate-800 flex items-center justify-center gap-1.5 shadow-xs">
+          <span class="text-[#5C45EE]">+</span> Add transaction
+        </button>
+
+        <!-- Transactions List -->
+        <div class="bg-white rounded-3xl p-4 shadow-xs border border-slate-200/70">
+          <h3 class="text-sm font-bold text-slate-900 mb-2">Recent Transactions</h3>
+          <div class="divide-y divide-slate-100">
+            ${expenses.map(e => `
+              <div class="py-2.5 flex justify-between items-center">
+                <div>
+                  <h4 class="text-xs font-bold text-slate-800">${e.title}</h4>
+                  <span class="text-[10px] text-slate-400 font-medium">${e.category}</span>
+                </div>
+                <span class="text-xs font-bold ${e.type === 'Income' ? 'text-emerald-600' : 'text-slate-900'}">
+                  ${e.type === 'Income' ? '+' : '-'}₹${e.amount.toLocaleString()}
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Initialize on launch
+    renderCurrentScreen();
+  </script>
+</body>
+</html>
