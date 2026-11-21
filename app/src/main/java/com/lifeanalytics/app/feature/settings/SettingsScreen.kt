@@ -616,7 +616,7 @@ fun SettingsScreen(
                             scope.launch {
                                 repository.rebuildHistoricalSampleData(preferences.currencyCode)
                                     .onSuccess { summary ->
-                                        preferencesRepository.setSampleHistoryEnabled(true)
+                                        preferencesRepository.setHasSeededHistoricalSample(true)
                                         demoStatusText = "Built ${summary.rangeLabel}: ${summary.existingHabitsUsed} existing habit(s), ${summary.habitCompletionsSeeded} completions, ${summary.tasksSeeded} sample tasks, ${summary.transactionsSeeded} finance entries."
                                     }
                                     .onFailure { err ->
@@ -637,7 +637,7 @@ fun SettingsScreen(
                                 repository.removeLegacyOctoberDemoData()
                                 repository.removeHistoricalSampleData()
                                     .onSuccess {
-                                        preferencesRepository.setSampleHistoryEnabled(false)
+                                        preferencesRepository.setHasSeededHistoricalSample(true)
                                         demoStatusText = "Removed all sample records. Personal habits, tasks, and transactions were preserved."
                                     }
                                     .onFailure { err ->

@@ -76,15 +76,17 @@ fun LifeAnalyticsApp(
     var reviewDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var financeDayFilterEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    // Historical sample data (June 1 – Nov 18, 2026) is generated on-device for the user's
-    // own existing habits/tasks. All generated rows use the `demo_hist_` ID prefix, never touch
-    // real rows, and are rebuilt idempotently on launch while enabled (so newly created habits
-    // receive history too). The legacy October-2026 [Demo] habits are always cleaned up.
-    // Turning it off in Settings removes every generated row and stops regeneration.
+    // Seed-once historical sample data (June 1 – Nov 18, 2026).
+    // Runs at most once if no historical sample data exists yet; never rebuilds on subsequent
+    // cold starts so user edits and deletions across Finance, Tasks, and Habits are permanent.
+    // Manual rebuild/removal remains available in Settings.
     LaunchedEffect(Unit) {
         repository.removeLegacyOctoberDemoData()
-        if (preferencesRepository.isSampleHistoryEnabled()) {
-            repository.rebuildHistoricalSampleData(preferences.currencyCode)
+        if (!preferencesRepository.hasSeededHistoricalSample()) {
+            if (!repository.hasHistoricalSampleData()) {
+                repository.rebuildHistoricalSampleData(preferences.currencyCode)
+            }
+            preferencesRepository.setHasSeededHistoricalSample(true)
         }
     }
 
