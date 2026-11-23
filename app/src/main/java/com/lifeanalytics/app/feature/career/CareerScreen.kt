@@ -480,13 +480,14 @@ fun CareerScreen(
             initialHabit = null,
             effectiveDate = today,
             onDismiss = { showAddHabitDialog = false },
-            onSave = { name, weekdays, area ->
+            onSave = { name, weekdays, area, reminderTime ->
                 scope.launch {
                     repository.createHabit(
                         name = name,
                         weekdays = weekdays,
                         effectiveFrom = today,
-                        lifeArea = area
+                        lifeArea = area,
+                        reminderTime = reminderTime
                     ).onSuccess {
                         showAddHabitDialog = false
                         snackbarHostState.showSnackbar("Habit saved")

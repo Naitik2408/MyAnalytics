@@ -68,6 +68,7 @@ import com.lifeanalytics.app.core.designsystem.LaContainerPanel
 import com.lifeanalytics.app.core.designsystem.LaFilterChip
 import com.lifeanalytics.app.core.designsystem.LaIconChip
 import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
+import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
 import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
 import com.lifeanalytics.app.core.designsystem.LaSegmentedControl
@@ -99,6 +100,7 @@ fun SettingsScreen(
     preferencesRepository: PreferencesRepository,
     repository: LifeAnalyticsRepository,
     backupManager: BackupManager? = null,
+    reminderManager: com.lifeanalytics.app.data.notifications.ReminderNotificationManager? = null,
     onNavigateBack: (() -> Unit)? = null
 ) {
     val colors = LaTheme.colors
@@ -110,6 +112,20 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingCurrencyChange by remember { mutableStateOf<SupportedCurrency?>(null) }
+
+    var hasNotificationPermission by remember {
+        mutableStateOf(reminderManager?.hasNotificationPermission() ?: true)
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        hasNotificationPermission = reminderManager?.hasNotificationPermission() ?: true
+        if (hasNotificationPermission) {
+            scope.launch {
+                reminderManager?.syncAllReminders(repository, preferencesRepository)
+            }
+        }
+    }
 
     val backupStatus = backupManager?.statusState?.collectAsState()?.value
 
@@ -269,6 +285,197 @@ fun SettingsScreen(
                         }
                     )
                 }
+            }
+        }
+
+        // Notifications Panel
+        item {
+            LaContainerPanel(
+                title = "Notifications",
+                subtitle = "Local reminders for scheduled tasks and recurring habits. Works offline without a background service."
+            ) {
+                // System permission status banner (distinct from in-app preference)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(radii.shapeSm)
+                        .background(if (hasNotificationPermission) tints.mint.soft else tints.butter.soft)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (hasNotificationPermission) {
+                                "Android permission: Allowed"
+                            } else {
+                                "Android permission: Disabled"
+                            },
+                            style = typography.label.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = if (hasNotificationPermission) {
+                                "Reminders can be delivered when the app is closed."
+                            } else {
+                                "Allow notifications so task and habit reminders can appear."
+                            },
+                            style = typography.chartMicroLabel,
+                            color = colors.textSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    if (!hasNotificationPermission && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        LaPrimaryButton(
+                            text = "Allow",
+                            onClick = {
+                                scope.launch {
+                                    preferencesRepository.setPromptedNotificationPermission(true)
+                                }
+                                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.space3))
+
+                // Master Enable / Disable Notifications switch
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Enable notifications",
+                            style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = "Turn all app reminders on or off",
+                            style = typography.chartMicroLabel,
+                            color = colors.textSecondary
+                        )
+                    }
+                    Switch(
+                        checked = preferences.notificationsEnabled,
+                        onCheckedChange = { enabled ->
+                            scope.launch {
+                                preferencesRepository.setNotificationsEnabled(enabled)
+                                reminderManager?.syncAllReminders(repository, preferencesRepository)
+                            }
+                        }
+                    )
+                }
+
+                if (preferences.notificationsEnabled) {
+                    Spacer(modifier = Modifier.height(spacing.space2))
+                    LaRowDivider()
+                    Spacer(modifier = Modifier.height(spacing.space2))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Task reminders",
+                                style = typography.body.copy(fontWeight = FontWeight.Medium),
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = "Notify for tasks with a planned date and time",
+                                style = typography.chartMicroLabel,
+                                color = colors.textSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.taskRemindersEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    preferencesRepository.setTaskRemindersEnabled(enabled)
+                                    reminderManager?.syncAllReminders(repository, preferencesRepository)
+                                }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(spacing.space2))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Habit reminders",
+                                style = typography.body.copy(fontWeight = FontWeight.Medium),
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = "Notify on active scheduled days when a reminder time is set",
+                                style = typography.chartMicroLabel,
+                                color = colors.textSecondary
+                            )
+                        }
+                        Switch(
+                            checked = preferences.habitRemindersEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    preferencesRepository.setHabitRemindersEnabled(enabled)
+                                    reminderManager?.syncAllReminders(repository, preferencesRepository)
+                                }
+                            }
+                        )
+                    }
+
+                    if (preferences.taskRemindersEnabled) {
+                        Spacer(modifier = Modifier.height(spacing.space3))
+                        Text(
+                            text = "Default task reminder time",
+                            style = typography.label,
+                            color = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(spacing.space2),
+                            verticalArrangement = Arrangement.spacedBy(spacing.space2)
+                        ) {
+                            val offsets = listOf(
+                                0 to "At time",
+                                5 to "5m before",
+                                10 to "10m before",
+                                15 to "15m before",
+                                30 to "30m before"
+                            )
+                            offsets.forEach { (mins, label) ->
+                                LaFilterChip(
+                                    label = label,
+                                    selected = preferences.taskReminderOffsetMinutes == mins,
+                                    onClick = {
+                                        scope.launch {
+                                            preferencesRepository.setTaskReminderOffsetMinutes(mins)
+                                            reminderManager?.syncAllReminders(repository, preferencesRepository)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(spacing.space3))
+                LaSecondaryButton(
+                    text = "Open Android Notification Settings",
+                    onClick = {
+                        com.lifeanalytics.app.data.notifications.ReminderNotificationManager
+                            .openAppNotificationSettings(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 

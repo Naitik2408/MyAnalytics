@@ -31,7 +31,7 @@ import com.lifeanalytics.app.data.local.entity.TaskEntity
         FinanceTransactionEntity::class,
         DailyReviewEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class LifeAnalyticsDatabase : RoomDatabase() {
@@ -56,6 +56,16 @@ abstract class LifeAnalyticsDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * Additive migration from v2 to v3:
+         * Adds optional reminder_time (HH:mm) column to habits without altering existing records.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE habits ADD COLUMN reminder_time TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: LifeAnalyticsDatabase? = null
 
@@ -66,7 +76,7 @@ abstract class LifeAnalyticsDatabase : RoomDatabase() {
                     LifeAnalyticsDatabase::class.java,
                     DATABASE_NAME
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     // Never use fallbackToDestructiveMigration in production (docs/11_DATA_ARCHITECTURE.md Section 16)
                     .build()
                     .also { INSTANCE = it }

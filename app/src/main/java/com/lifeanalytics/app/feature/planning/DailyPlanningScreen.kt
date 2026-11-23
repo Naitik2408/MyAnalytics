@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +24,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -45,11 +51,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lifeanalytics.app.core.designsystem.ConfirmDeleteDialog
@@ -66,6 +74,7 @@ import com.lifeanalytics.app.core.designsystem.LaPrimaryButton
 import com.lifeanalytics.app.core.designsystem.LaRowDivider
 import com.lifeanalytics.app.core.designsystem.LaScreenHeader
 import com.lifeanalytics.app.core.designsystem.LaSecondaryButton
+import com.lifeanalytics.app.core.designsystem.LaTextButton
 import com.lifeanalytics.app.core.designsystem.LaTextField
 import com.lifeanalytics.app.core.designsystem.LaTheme
 import com.lifeanalytics.app.core.designsystem.SectionHeader
@@ -496,7 +505,7 @@ fun TaskFormDialog(
         plannedDate: LocalDate,
         plannedTime: LocalTime?,
         estimatedMinutes: Int?,
-        lifeArea: com.lifeanalytics.app.domain.model.LifeArea
+        lifeArea: com.lifeanalytics.app.domain.model.LifeArea?
     ) -> Result<Unit>,
     defaultLifeArea: com.lifeanalytics.app.domain.model.LifeArea? = null
 ) {
@@ -505,24 +514,35 @@ fun TaskFormDialog(
     val spacing = LaTheme.spacing
     val radii = LaTheme.radii
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* Permission result handled gracefully by ReminderNotificationManager */ }
 
     var title by rememberSaveable { mutableStateOf(initialTask?.title ?: "") }
     var selectedLifeArea by rememberSaveable {
         mutableStateOf<com.lifeanalytics.app.domain.model.LifeArea?>(initialTask?.lifeArea ?: defaultLifeArea)
     }
     var category by rememberSaveable { mutableStateOf(initialTask?.category ?: TaskCategory.OTHER) }
-    var plannedDateIso by rememberSaveable {
-        mutableStateOf(DateAttributionPolicy.formatIsoDate(initialTask?.plannedDate ?: defaultDate))
+    var plannedDateEpoch by rememberSaveable {
+        mutableStateOf((initialTask?.plannedDate ?: defaultDate).toEpochDay())
     }
-    var plannedTimeText by rememberSaveable {
-        mutableStateOf(initialTask?.plannedTime?.let { DateAttributionPolicy.formatLocalTime(it) } ?: "")
+    var plannedTimeMinutes by rememberSaveable {
+        mutableStateOf<Int?>(initialTask?.plannedTime?.let { it.hour * 60 + it.minute })
     }
     var estimatedMinutesText by rememberSaveable {
         mutableStateOf(initialTask?.estimatedDurationMinutes?.toString() ?: "")
     }
+    var showAdvanced by rememberSaveable { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+
+    val plannedDate = LocalDate.ofEpochDay(plannedDateEpoch)
+    val plannedTime = plannedTimeMinutes?.let { LocalTime.of(it / 60, it % 60) }
 
     ModalBottomSheet(
         onDismissRequest = { if (!isSaving) onDismiss() },
@@ -558,7 +578,7 @@ fun TaskFormDialog(
             )
 
             Text(
-                text = "Life Area *",
+                text = "Life Area (optional)",
                 style = typography.label,
                 color = colors.textSecondary
             )
@@ -566,6 +586,14 @@ fun TaskFormDialog(
                 horizontalArrangement = Arrangement.spacedBy(spacing.space2),
                 verticalArrangement = Arrangement.spacedBy(spacing.space2)
             ) {
+                LaFilterChip(
+                    label = "None",
+                    selected = selectedLifeArea == null,
+                    onClick = {
+                        selectedLifeArea = null
+                        validationError = null
+                    }
+                )
                 com.lifeanalytics.app.domain.model.LifeArea.entries.forEach { area ->
                     LaFilterChip(
                         label = area.displayName,
@@ -596,52 +624,167 @@ fun TaskFormDialog(
                 }
             }
 
-            LaTextField(
-                value = plannedDateIso,
-                onValueChange = {
-                    plannedDateIso = it
-                    validationError = null
-                },
-                label = "Planned date (YYYY-MM-DD)",
-                singleLine = true
-            )
+            // Collapsible Advanced Settings (collapsed by default; never clears values on collapse)
+            val advancedSummary = buildString {
+                append(DateAttributionPolicy.formatShortDate(plannedDate))
+                plannedTime?.let { append(" • ${DateAttributionPolicy.formatLocalTime(it)}") }
+                estimatedMinutesText.trim().toIntOrNull()?.takeIf { it > 0 }?.let { append(" • ${it}m") }
+            }
 
-            LaTextField(
-                value = plannedTimeText,
-                onValueChange = {
-                    plannedTimeText = it
-                    validationError = null
-                },
-                label = "Planned time (optional, HH:mm)",
-                placeholder = "e.g. 10:00 or leave blank",
-                singleLine = true
-            )
-
-            LaTextField(
-                value = estimatedMinutesText,
-                onValueChange = {
-                    estimatedMinutesText = it
-                    validationError = null
-                },
-                label = "Estimated duration in minutes (optional)",
-                placeholder = "e.g. 30 or leave blank",
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
-            )
-
-            Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
-                listOf(15, 30, 45, 60).forEach { preset ->
-                    Surface(
-                        shape = radii.shapeFull,
-                        color = colors.surfaceVariant,
-                        modifier = Modifier.clickable { estimatedMinutesText = preset.toString() }
-                    ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(radii.shapeMd)
+                    .background(colors.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAdvanced = !showAdvanced }
+                        .padding(horizontal = spacing.space4, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "${preset}m",
-                            style = typography.label.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.textPrimary,
-                            modifier = Modifier.padding(horizontal = spacing.space3, vertical = 6.dp)
+                            text = "Advanced Settings",
+                            style = typography.body.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
                         )
+                        if (!showAdvanced) {
+                            Text(
+                                text = advancedSummary,
+                                style = typography.chartMicroLabel,
+                                color = colors.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showAdvanced) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = if (showAdvanced) "Collapse advanced settings" else "Expand advanced settings",
+                        tint = colors.textSecondary
+                    )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(visible = showAdvanced) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = spacing.space4, end = spacing.space4, bottom = spacing.space4),
+                        verticalArrangement = Arrangement.spacedBy(spacing.space3)
+                    ) {
+                        // Planned Date Picker Trigger
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Planned date",
+                                style = typography.label,
+                                color = colors.textSecondary
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(radii.shapeSm)
+                                    .background(colors.surface)
+                                    .clickable { showDatePicker = true }
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = DateAttributionPolicy.formatDisplayDate(plannedDate),
+                                    style = typography.body.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.textPrimary
+                                )
+                                Icon(
+                                    imageVector = Icons.Outlined.CalendarToday,
+                                    contentDescription = "Choose planned date",
+                                    tint = colors.accent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        // Planned Time Picker Trigger (optional + clearable)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "Planned time (optional • enables reminder)",
+                                style = typography.label,
+                                color = colors.textSecondary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(radii.shapeSm)
+                                        .background(colors.surface)
+                                        .clickable { showTimePicker = true }
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = plannedTime?.let { DateAttributionPolicy.formatLocalTime(it) }
+                                            ?: "No time set",
+                                        style = typography.body.copy(
+                                            fontWeight = if (plannedTime != null) FontWeight.Medium else FontWeight.Normal
+                                        ),
+                                        color = if (plannedTime != null) colors.textPrimary else colors.textSecondary
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Outlined.Schedule,
+                                        contentDescription = "Choose planned time",
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                if (plannedTime != null) {
+                                    LaTextButton(
+                                        text = "Clear",
+                                        onClick = { plannedTimeMinutes = null },
+                                        color = colors.textSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        // Estimated Duration (optional presets + custom minutes)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Estimated duration (optional)",
+                                style = typography.label,
+                                color = colors.textSecondary
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(spacing.space2)) {
+                                listOf(15, 30, 45, 60).forEach { preset ->
+                                    val isSelected = estimatedMinutesText.trim() == preset.toString()
+                                    LaFilterChip(
+                                        label = "${preset}m",
+                                        selected = isSelected,
+                                        onClick = {
+                                            estimatedMinutesText = if (isSelected) "" else preset.toString()
+                                            validationError = null
+                                        }
+                                    )
+                                }
+                            }
+                            LaTextField(
+                                value = estimatedMinutesText,
+                                onValueChange = {
+                                    estimatedMinutesText = it
+                                    validationError = null
+                                },
+                                label = "Custom minutes (optional)",
+                                placeholder = "e.g. 25 or leave blank",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true
+                            )
+                        }
                     }
                 }
             }
@@ -675,29 +818,6 @@ fun TaskFormDialog(
                             return@LaPrimaryButton
                         }
 
-                        val area = selectedLifeArea
-                        if (area == null) {
-                            validationError = "Select a Life Area (Health & Lifestyle, Career & Productivity, or Finance & Wealth)."
-                            return@LaPrimaryButton
-                        }
-
-                        val parsedDate = try {
-                            DateAttributionPolicy.parseIsoDate(plannedDateIso.trim())
-                        } catch (_: Exception) {
-                            validationError = "Enter a valid date in YYYY-MM-DD format."
-                            return@LaPrimaryButton
-                        }
-
-                        val trimmedTime = plannedTimeText.trim()
-                        val parsedTime = if (trimmedTime.isEmpty()) {
-                            null
-                        } else {
-                            DateAttributionPolicy.parseLocalTimeOrNull(trimmedTime) ?: run {
-                                validationError = "Enter planned time in 24-hour HH:mm format (e.g. 09:30 or 14:00)."
-                                return@LaPrimaryButton
-                            }
-                        }
-
                         val trimmedEstimate = estimatedMinutesText.trim()
                         val parsedEstimate = if (trimmedEstimate.isEmpty()) {
                             null
@@ -710,9 +830,22 @@ fun TaskFormDialog(
                             value
                         }
 
+                        // Polite one-time runtime permission request on Android 13+ when scheduling a timed reminder
+                        if (plannedTime != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            val app = context.applicationContext as? com.lifeanalytics.app.LifeAnalyticsApplication
+                            if (app != null && !app.reminderManager.hasNotificationPermission()) {
+                                scope.launch {
+                                    if (!app.preferencesRepository.hasPromptedNotificationPermission()) {
+                                        app.preferencesRepository.setPromptedNotificationPermission(true)
+                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                            }
+                        }
+
                         isSaving = true
                         scope.launch {
-                            val res = onSave(title, category, parsedDate, parsedTime, parsedEstimate, area)
+                            val res = onSave(title, category, plannedDate, plannedTime, parsedEstimate, selectedLifeArea)
                             isSaving = false
                             res.onFailure { validationError = it.message ?: "Could not save task." }
                         }
@@ -720,5 +853,27 @@ fun TaskFormDialog(
                 )
             }
         }
+    }
+
+    if (showDatePicker) {
+        com.lifeanalytics.app.core.designsystem.LaDatePickerDialog(
+            initialDate = plannedDate,
+            onDismiss = { showDatePicker = false },
+            onConfirm = { picked ->
+                plannedDateEpoch = picked.toEpochDay()
+                showDatePicker = false
+            }
+        )
+    }
+
+    if (showTimePicker) {
+        com.lifeanalytics.app.core.designsystem.LaTimePickerDialog(
+            initialTime = plannedTime,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { picked ->
+                plannedTimeMinutes = picked.hour * 60 + picked.minute
+                showTimePicker = false
+            }
+        )
     }
 }

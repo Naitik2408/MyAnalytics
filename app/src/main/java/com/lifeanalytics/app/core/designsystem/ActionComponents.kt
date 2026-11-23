@@ -241,3 +241,91 @@ fun LaCategoryPeriodSelector(
         )
     }
 }
+
+/**
+ * Reusable Material 3 DatePickerDialog styled to match Life Analytics.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun LaDatePickerDialog(
+    initialDate: java.time.LocalDate,
+    onDismiss: () -> Unit,
+    onConfirm: (java.time.LocalDate) -> Unit
+) {
+    val initialMillis = initialDate.atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
+    val state = androidx.compose.material3.rememberDatePickerState(
+        initialSelectedDateMillis = initialMillis
+    )
+    androidx.compose.material3.DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            LaTextButton(
+                text = "Select",
+                onClick = {
+                    val millis = state.selectedDateMillis
+                    if (millis != null) {
+                        val picked = java.time.Instant.ofEpochMilli(millis)
+                            .atZone(java.time.ZoneOffset.UTC)
+                            .toLocalDate()
+                        onConfirm(picked)
+                    } else {
+                        onDismiss()
+                    }
+                }
+            )
+        },
+        dismissButton = {
+            LaTextButton(text = "Cancel", onClick = onDismiss, color = LaTheme.colors.textSecondary)
+        }
+    ) {
+        androidx.compose.material3.DatePicker(state = state)
+    }
+}
+
+/**
+ * Reusable Material 3 TimePicker dialog styled to match Life Analytics.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun LaTimePickerDialog(
+    initialTime: java.time.LocalTime?,
+    onDismiss: () -> Unit,
+    onConfirm: (java.time.LocalTime) -> Unit
+) {
+    val fallback = initialTime ?: java.time.LocalTime.of(9, 0)
+    val state = androidx.compose.material3.rememberTimePickerState(
+        initialHour = fallback.hour,
+        initialMinute = fallback.minute,
+        is24Hour = true
+    )
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = LaTheme.radii.shapeLg,
+        containerColor = LaTheme.colors.surface,
+        title = {
+            Text(
+                text = "Select time",
+                style = LaTheme.typography.sectionTitle,
+                color = LaTheme.colors.textPrimary
+            )
+        },
+        text = {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.TimePicker(state = state)
+            }
+        },
+        confirmButton = {
+            LaTextButton(
+                text = "Set time",
+                onClick = { onConfirm(java.time.LocalTime.of(state.hour, state.minute)) }
+            )
+        },
+        dismissButton = {
+            LaTextButton(text = "Cancel", onClick = onDismiss, color = LaTheme.colors.textSecondary)
+        }
+    )
+}
+

@@ -179,6 +179,7 @@ object BackupSerializer {
                         putOptNullableLong("deactivatedAtEpochMillis", h.deactivatedAtEpochMillis)
                         putOptNullable("deactivatedFromLocalDate", h.deactivatedFromLocalDate)
                         putOptNullable("lifeArea", h.lifeArea)
+                        putOptNullable("reminderTime", h.reminderTime)
                     }
                 )
             }
@@ -350,7 +351,8 @@ object BackupSerializer {
                 updatedAtEpochMillis = o.getLong("updatedAtEpochMillis"),
                 deactivatedAtEpochMillis = o.optNullableLong("deactivatedAtEpochMillis"),
                 deactivatedFromLocalDate = o.optNullableString("deactivatedFromLocalDate"),
-                lifeArea = o.optNullableString("lifeArea")
+                lifeArea = o.optNullableString("lifeArea"),
+                reminderTime = o.optNullableString("reminderTime")
             )
         }
 

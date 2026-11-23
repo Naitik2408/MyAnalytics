@@ -676,13 +676,14 @@ fun HomeDashboardScreen(
             initialHabit = null,
             effectiveDate = today,
             onDismiss = { showAddHabitDialog = false },
-            onSave = { name, weekdays, lifeArea ->
+            onSave = { name, weekdays, lifeArea, reminderTime ->
                 scope.launch {
                     repository.createHabit(
                         name = name,
                         weekdays = weekdays,
                         effectiveFrom = today,
-                        lifeArea = lifeArea
+                        lifeArea = lifeArea,
+                        reminderTime = reminderTime
                     ).onSuccess {
                         showAddHabitDialog = false
                         snackbarHostState.showSnackbar("Habit saved")

@@ -154,7 +154,9 @@ data class HabitEntity(
     @ColumnInfo(name = "deactivated_from_local_date")
     val deactivatedFromLocalDate: String?, // YYYY-MM-DD exclusive end date
     @ColumnInfo(name = "life_area")
-    val lifeArea: String? = null
+    val lifeArea: String? = null,
+    @ColumnInfo(name = "reminder_time")
+    val reminderTime: String? = null // Optional HH:mm local reminder time
 )
 
 @Entity(

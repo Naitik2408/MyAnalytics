@@ -15,6 +15,7 @@ import com.lifeanalytics.app.data.local.entity.HabitEntity
 import com.lifeanalytics.app.data.local.entity.HabitSchedulePeriodEntity
 import com.lifeanalytics.app.data.local.entity.HabitWithSchedules
 import com.lifeanalytics.app.data.local.entity.TaskEntity
+import com.lifeanalytics.app.domain.model.AppPreferences
 import com.lifeanalytics.app.domain.model.DailyReview
 import com.lifeanalytics.app.domain.model.DefaultFinanceCategories
 import com.lifeanalytics.app.domain.model.FinanceTransaction
@@ -38,17 +39,36 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class LifeAnalyticsRepository(
     private val database: LifeAnalyticsDatabase,
-    private val timeProvider: TimeProvider = SystemTimeProvider()
+    private val timeProvider: TimeProvider = SystemTimeProvider(),
+    private val reminderManager: com.lifeanalytics.app.data.notifications.ReminderNotificationManager? = null,
+    private val preferencesRepository: PreferencesRepository? = null
 ) {
     private val taskDao = database.taskDao()
     private val focusDao = database.focusDao()
     private val habitDao = database.habitDao()
     private val financeDao = database.financeDao()
     private val reviewDao = database.dailyReviewDao()
+
+    private suspend fun syncTaskReminder(task: Task) {
+        val manager = reminderManager ?: return
+        val prefs = preferencesRepository?.preferencesFlow?.first() ?: AppPreferences()
+        manager.scheduleTaskReminder(task, prefs)
+    }
+
+    private suspend fun syncHabitReminder(habit: Habit) {
+        val manager = reminderManager ?: return
+        val prefs = preferencesRepository?.preferencesFlow?.first() ?: AppPreferences()
+        val completedDates = habitDao.getAllCompletionEntities()
+            .filter { it.habitId == habit.id && it.isCompleted }
+            .map { DateAttributionPolicy.parseIsoDate(it.completionDate) }
+            .toSet()
+        manager.scheduleHabitReminder(habit, completedDates, prefs)
+    }
 
     // =========================================================================
     // TASKS (Daily Planning)
@@ -113,7 +133,9 @@ class LifeAnalyticsRepository(
             lifeArea = lifeArea?.name
         )
         taskDao.upsertTask(entity)
-        return Result.success(entity.toDomain())
+        val domain = entity.toDomain()
+        syncTaskReminder(domain)
+        return Result.success(domain)
     }
 
     suspend fun updateTask(
@@ -143,10 +165,12 @@ class LifeAnalyticsRepository(
             plannedTime = plannedTime?.let { DateAttributionPolicy.formatLocalTime(it) },
             estimatedDurationMinutes = estimatedDurationMinutes,
             updatedAtEpochMillis = now,
-            lifeArea = lifeArea?.name ?: existing.lifeArea
+            lifeArea = lifeArea?.name
         )
         taskDao.upsertTask(updated)
-        return Result.success(updated.toDomain())
+        val domain = updated.toDomain()
+        syncTaskReminder(domain)
+        return Result.success(domain)
     }
 
     suspend fun setTaskCompleted(taskId: String, completed: Boolean): Result<Task> {
@@ -159,13 +183,16 @@ class LifeAnalyticsRepository(
             updatedAtEpochMillis = now
         )
         taskDao.upsertTask(updated)
-        return Result.success(updated.toDomain())
+        val domain = updated.toDomain()
+        syncTaskReminder(domain)
+        return Result.success(domain)
     }
 
     suspend fun deleteTask(taskId: String): Result<Unit> {
         // ForeignKey.SET_NULL on focus_sessions.task_id + task_title_snapshot ensures
         // historical focus sessions remain intact and readable after task deletion.
         taskDao.deleteTaskById(taskId)
+        reminderManager?.cancelTaskReminder(taskId)
         return Result.success(Unit)
     }
 
@@ -530,42 +557,48 @@ class LifeAnalyticsRepository(
         name: String,
         weekdays: Set<DayOfWeek>,
         effectiveFrom: LocalDate = timeProvider.todayLocalDate(),
-        lifeArea: LifeArea? = null
-    ): Result<Habit> = database.withTransaction {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
-            return@withTransaction Result.failure(IllegalArgumentException("Enter a habit name."))
-        }
-        if (weekdays.isEmpty()) {
-            return@withTransaction Result.failure(IllegalArgumentException("Select at least one scheduled weekday."))
-        }
+        lifeArea: LifeArea? = null,
+        reminderTime: LocalTime? = null
+    ): Result<Habit> {
+        val result = database.withTransaction {
+            val trimmed = name.trim()
+            if (trimmed.isEmpty()) {
+                return@withTransaction Result.failure(IllegalArgumentException("Enter a habit name."))
+            }
+            if (weekdays.isEmpty()) {
+                return@withTransaction Result.failure(IllegalArgumentException("Select at least one scheduled weekday."))
+            }
 
-        val now = timeProvider.nowEpochMillis()
-        val habitId = UUID.randomUUID().toString()
-        val habitEntity = HabitEntity(
-            id = habitId,
-            name = trimmed,
-            isActive = true,
-            createdAtEpochMillis = now,
-            updatedAtEpochMillis = now,
-            deactivatedAtEpochMillis = null,
-            deactivatedFromLocalDate = null,
-            lifeArea = lifeArea?.name
-        )
-        val scheduleType = HabitScheduleType.fromWeekdays(weekdays)
-        val periodEntity = HabitSchedulePeriodEntity(
-            id = UUID.randomUUID().toString(),
-            habitId = habitId,
-            effectiveFrom = DateAttributionPolicy.formatIsoDate(effectiveFrom),
-            effectiveTo = null,
-            scheduleType = scheduleType.name,
-            weekdaysCsv = encodeWeekdaysCsv(weekdays),
-            createdAtEpochMillis = now
-        )
+            val now = timeProvider.nowEpochMillis()
+            val habitId = UUID.randomUUID().toString()
+            val habitEntity = HabitEntity(
+                id = habitId,
+                name = trimmed,
+                isActive = true,
+                createdAtEpochMillis = now,
+                updatedAtEpochMillis = now,
+                deactivatedAtEpochMillis = null,
+                deactivatedFromLocalDate = null,
+                lifeArea = lifeArea?.name,
+                reminderTime = reminderTime?.let { DateAttributionPolicy.formatLocalTime(it) }
+            )
+            val scheduleType = HabitScheduleType.fromWeekdays(weekdays)
+            val periodEntity = HabitSchedulePeriodEntity(
+                id = UUID.randomUUID().toString(),
+                habitId = habitId,
+                effectiveFrom = DateAttributionPolicy.formatIsoDate(effectiveFrom),
+                effectiveTo = null,
+                scheduleType = scheduleType.name,
+                weekdaysCsv = encodeWeekdaysCsv(weekdays),
+                createdAtEpochMillis = now
+            )
 
-        habitDao.insertHabit(habitEntity)
-        habitDao.insertSchedulePeriod(periodEntity)
-        Result.success(HabitWithSchedules(habitEntity, listOf(periodEntity)).toDomain())
+            habitDao.insertHabit(habitEntity)
+            habitDao.insertSchedulePeriod(periodEntity)
+            Result.success(HabitWithSchedules(habitEntity, listOf(periodEntity)).toDomain())
+        }
+        result.getOrNull()?.let { syncHabitReminder(it) }
+        return result
     }
 
     /**
@@ -580,57 +613,63 @@ class LifeAnalyticsRepository(
         name: String,
         weekdays: Set<DayOfWeek>,
         effectiveDate: LocalDate = timeProvider.todayLocalDate(),
-        lifeArea: LifeArea? = null
-    ): Result<Habit> = database.withTransaction {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
-            return@withTransaction Result.failure(IllegalArgumentException("Enter a habit name."))
-        }
-        if (weekdays.isEmpty()) {
-            return@withTransaction Result.failure(IllegalArgumentException("Select at least one scheduled weekday."))
-        }
-
-        val existing = habitDao.getHabitWithSchedulesById(habitId)
-            ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
-        val now = timeProvider.nowEpochMillis()
-        val effectiveIso = DateAttributionPolicy.formatIsoDate(effectiveDate)
-        val newScheduleType = HabitScheduleType.fromWeekdays(weekdays)
-        val newWeekdaysCsv = encodeWeekdaysCsv(weekdays)
-
-        val updatedHabit = existing.habit.copy(
-            name = trimmed,
-            updatedAtEpochMillis = now,
-            lifeArea = lifeArea?.name ?: existing.habit.lifeArea
-        )
-        habitDao.updateHabit(updatedHabit)
-
-        // Preserve periods strictly before effectiveDate; adjust or replace periods starting on/after effectiveDate
-        val sortedPeriods = existing.schedules.sortedBy { it.effectiveFrom }
-        for (period in sortedPeriods) {
-            val fromDate = DateAttributionPolicy.parseIsoDate(period.effectiveFrom)
-            val toDate = period.effectiveTo?.let { DateAttributionPolicy.parseIsoDate(it) }
-            if (!fromDate.isBefore(effectiveDate)) {
-                // Starts on or after effectiveDate -> replace with new period
-                habitDao.deleteSchedulePeriodById(period.id)
-            } else if (toDate == null || toDate.isAfter(effectiveDate)) {
-                // Started before effectiveDate and extends past effectiveDate -> close at effectiveDate (exclusive)
-                habitDao.updateSchedulePeriod(period.copy(effectiveTo = effectiveIso))
+        lifeArea: LifeArea? = null,
+        reminderTime: LocalTime? = null
+    ): Result<Habit> {
+        val result = database.withTransaction {
+            val trimmed = name.trim()
+            if (trimmed.isEmpty()) {
+                return@withTransaction Result.failure(IllegalArgumentException("Enter a habit name."))
             }
+            if (weekdays.isEmpty()) {
+                return@withTransaction Result.failure(IllegalArgumentException("Select at least one scheduled weekday."))
+            }
+
+            val existing = habitDao.getHabitWithSchedulesById(habitId)
+                ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
+            val now = timeProvider.nowEpochMillis()
+            val effectiveIso = DateAttributionPolicy.formatIsoDate(effectiveDate)
+            val newScheduleType = HabitScheduleType.fromWeekdays(weekdays)
+            val newWeekdaysCsv = encodeWeekdaysCsv(weekdays)
+
+            val updatedHabit = existing.habit.copy(
+                name = trimmed,
+                updatedAtEpochMillis = now,
+                lifeArea = lifeArea?.name ?: existing.habit.lifeArea,
+                reminderTime = reminderTime?.let { DateAttributionPolicy.formatLocalTime(it) }
+            )
+            habitDao.updateHabit(updatedHabit)
+
+            // Preserve periods strictly before effectiveDate; adjust or replace periods starting on/after effectiveDate
+            val sortedPeriods = existing.schedules.sortedBy { it.effectiveFrom }
+            for (period in sortedPeriods) {
+                val fromDate = DateAttributionPolicy.parseIsoDate(period.effectiveFrom)
+                val toDate = period.effectiveTo?.let { DateAttributionPolicy.parseIsoDate(it) }
+                if (!fromDate.isBefore(effectiveDate)) {
+                    // Starts on or after effectiveDate -> replace with new period
+                    habitDao.deleteSchedulePeriodById(period.id)
+                } else if (toDate == null || toDate.isAfter(effectiveDate)) {
+                    // Started before effectiveDate and extends past effectiveDate -> close at effectiveDate (exclusive)
+                    habitDao.updateSchedulePeriod(period.copy(effectiveTo = effectiveIso))
+                }
+            }
+
+            val newPeriod = HabitSchedulePeriodEntity(
+                id = UUID.randomUUID().toString(),
+                habitId = habitId,
+                effectiveFrom = effectiveIso,
+                effectiveTo = existing.habit.deactivatedFromLocalDate,
+                scheduleType = newScheduleType.name,
+                weekdaysCsv = newWeekdaysCsv,
+                createdAtEpochMillis = now
+            )
+            habitDao.insertSchedulePeriod(newPeriod)
+
+            val reloaded = habitDao.getHabitWithSchedulesById(habitId)!!
+            Result.success(reloaded.toDomain())
         }
-
-        val newPeriod = HabitSchedulePeriodEntity(
-            id = UUID.randomUUID().toString(),
-            habitId = habitId,
-            effectiveFrom = effectiveIso,
-            effectiveTo = existing.habit.deactivatedFromLocalDate,
-            scheduleType = newScheduleType.name,
-            weekdaysCsv = newWeekdaysCsv,
-            createdAtEpochMillis = now
-        )
-        habitDao.insertSchedulePeriod(newPeriod)
-
-        val reloaded = habitDao.getHabitWithSchedulesById(habitId)!!
-        Result.success(reloaded.toDomain())
+        result.getOrNull()?.let { syncHabitReminder(it) }
+        return result
     }
 
     /**
@@ -639,34 +678,41 @@ class LifeAnalyticsRepository(
     suspend fun deactivateHabit(
         habitId: String,
         effectiveDate: LocalDate = timeProvider.todayLocalDate()
-    ): Result<Habit> = database.withTransaction {
-        val existing = habitDao.getHabitWithSchedulesById(habitId)
-            ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
-        val now = timeProvider.nowEpochMillis()
-        val effectiveIso = DateAttributionPolicy.formatIsoDate(effectiveDate)
+    ): Result<Habit> {
+        val result = database.withTransaction {
+            val existing = habitDao.getHabitWithSchedulesById(habitId)
+                ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
+            val now = timeProvider.nowEpochMillis()
+            val effectiveIso = DateAttributionPolicy.formatIsoDate(effectiveDate)
 
-        for (period in existing.schedules) {
-            val fromDate = DateAttributionPolicy.parseIsoDate(period.effectiveFrom)
-            val toDate = period.effectiveTo?.let { DateAttributionPolicy.parseIsoDate(it) }
-            if (!fromDate.isBefore(effectiveDate)) {
-                habitDao.deleteSchedulePeriodById(period.id)
-            } else if (toDate == null || toDate.isAfter(effectiveDate)) {
-                habitDao.updateSchedulePeriod(period.copy(effectiveTo = effectiveIso))
+            for (period in existing.schedules) {
+                val fromDate = DateAttributionPolicy.parseIsoDate(period.effectiveFrom)
+                val toDate = period.effectiveTo?.let { DateAttributionPolicy.parseIsoDate(it) }
+                if (!fromDate.isBefore(effectiveDate)) {
+                    habitDao.deleteSchedulePeriodById(period.id)
+                } else if (toDate == null || toDate.isAfter(effectiveDate)) {
+                    habitDao.updateSchedulePeriod(period.copy(effectiveTo = effectiveIso))
+                }
             }
-        }
 
-        val updated = existing.habit.copy(
-            isActive = false,
-            deactivatedAtEpochMillis = now,
-            deactivatedFromLocalDate = effectiveIso,
-            updatedAtEpochMillis = now
-        )
-        habitDao.updateHabit(updated)
-        Result.success(habitDao.getHabitWithSchedulesById(habitId)!!.toDomain())
+            val updated = existing.habit.copy(
+                isActive = false,
+                deactivatedAtEpochMillis = now,
+                deactivatedFromLocalDate = effectiveIso,
+                updatedAtEpochMillis = now
+            )
+            habitDao.updateHabit(updated)
+            Result.success(habitDao.getHabitWithSchedulesById(habitId)!!.toDomain())
+        }
+        if (result.isSuccess) {
+            reminderManager?.cancelHabitReminder(habitId)
+        }
+        return result
     }
 
     suspend fun deleteHabitPermanently(habitId: String): Result<Unit> {
         habitDao.deleteHabitById(habitId)
+        reminderManager?.cancelHabitReminder(habitId)
         return Result.success(Unit)
     }
 
@@ -679,42 +725,48 @@ class LifeAnalyticsRepository(
         habitId: String,
         date: LocalDate,
         completed: Boolean
-    ): Result<HabitCompletion> = database.withTransaction {
-        val today = timeProvider.todayLocalDate()
-        if (date.isAfter(today)) {
-            return@withTransaction Result.failure(
-                IllegalArgumentException("Habit completion can only be recorded on or before today.")
-            )
-        }
-        val habit = habitDao.getHabitWithSchedulesById(habitId)?.toDomain()
-            ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
-        if (!habit.isDueOn(date)) {
-            return@withTransaction Result.failure(
-                IllegalArgumentException("This habit is not scheduled on the selected date.")
-            )
-        }
+    ): Result<HabitCompletion> {
+        val result = database.withTransaction {
+            val today = timeProvider.todayLocalDate()
+            if (date.isAfter(today)) {
+                return@withTransaction Result.failure(
+                    IllegalArgumentException("Habit completion can only be recorded on or before today.")
+                )
+            }
+            val habit = habitDao.getHabitWithSchedulesById(habitId)?.toDomain()
+                ?: return@withTransaction Result.failure(IllegalArgumentException("Habit not found."))
+            if (!habit.isDueOn(date)) {
+                return@withTransaction Result.failure(
+                    IllegalArgumentException("This habit is not scheduled on the selected date.")
+                )
+            }
 
-        val dateIso = DateAttributionPolicy.formatIsoDate(date)
-        val now = timeProvider.nowEpochMillis()
-        val existing = habitDao.getCompletionForHabitAndDate(habitId, dateIso)
-        val entity = if (existing != null) {
-            existing.copy(
-                isCompleted = completed,
-                completedAtEpochMillis = if (completed) now else null,
-                updatedAtEpochMillis = now
-            )
-        } else {
-            HabitCompletionEntity(
-                id = UUID.randomUUID().toString(),
-                habitId = habitId,
-                completionDate = dateIso,
-                isCompleted = completed,
-                completedAtEpochMillis = if (completed) now else null,
-                updatedAtEpochMillis = now
-            )
+            val dateIso = DateAttributionPolicy.formatIsoDate(date)
+            val now = timeProvider.nowEpochMillis()
+            val existing = habitDao.getCompletionForHabitAndDate(habitId, dateIso)
+            val entity = if (existing != null) {
+                existing.copy(
+                    isCompleted = completed,
+                    completedAtEpochMillis = if (completed) now else null,
+                    updatedAtEpochMillis = now
+                )
+            } else {
+                HabitCompletionEntity(
+                    id = UUID.randomUUID().toString(),
+                    habitId = habitId,
+                    completionDate = dateIso,
+                    isCompleted = completed,
+                    completedAtEpochMillis = if (completed) now else null,
+                    updatedAtEpochMillis = now
+                )
+            }
+            habitDao.upsertCompletion(entity)
+            Result.success(entity.toDomain())
         }
-        habitDao.upsertCompletion(entity)
-        Result.success(entity.toDomain())
+        if (result.isSuccess) {
+            habitDao.getHabitWithSchedulesById(habitId)?.toDomain()?.let { syncHabitReminder(it) }
+        }
+        return result
     }
 
     // =========================================================================
@@ -968,7 +1020,8 @@ class LifeAnalyticsRepository(
             deactivatedAtEpochMillis = habit.deactivatedAtEpochMillis,
             deactivatedFromLocalDate = habit.deactivatedFromLocalDate?.let { DateAttributionPolicy.parseIsoDate(it) },
             schedulePeriods = schedules.sortedBy { it.effectiveFrom }.map { it.toDomain() },
-            lifeArea = LifeArea.fromNameOrNull(habit.lifeArea)
+            lifeArea = LifeArea.fromNameOrNull(habit.lifeArea),
+            reminderTime = habit.reminderTime?.let { DateAttributionPolicy.parseLocalTimeOrNull(it) }
         )
     }
 

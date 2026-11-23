@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -23,8 +24,10 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -41,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -63,6 +67,7 @@ import com.lifeanalytics.app.core.designsystem.LaStatTile
 import com.lifeanalytics.app.core.designsystem.LaTextButton
 import com.lifeanalytics.app.core.designsystem.LaTextField
 import com.lifeanalytics.app.core.designsystem.LaTheme
+import com.lifeanalytics.app.core.designsystem.pressScaleClickable
 import com.lifeanalytics.app.core.designsystem.LaTintedTile
 import com.lifeanalytics.app.core.designsystem.SectionHeader
 import com.lifeanalytics.app.core.time.DateAttributionPolicy
@@ -369,13 +374,14 @@ fun DailyHabitsScreen(
             initialHabit = null,
             effectiveDate = today,
             onDismiss = { showAddHabitDialog = false },
-            onSave = { name, weekdays, lifeArea ->
+            onSave = { name, weekdays, lifeArea, reminderTime ->
                 scope.launch {
                     repository.createHabit(
                         name = name,
                         weekdays = weekdays,
                         effectiveFrom = selectedDate.coerceAtMost(today),
-                        lifeArea = lifeArea
+                        lifeArea = lifeArea,
+                        reminderTime = reminderTime
                     ).onSuccess {
                         showAddHabitDialog = false
                         snackbarHostState.showSnackbar("Habit saved")
@@ -395,14 +401,15 @@ fun DailyHabitsScreen(
             initialHabit = editing,
             effectiveDate = today,
             onDismiss = { habitToEdit = null },
-            onSave = { name, weekdays, lifeArea ->
+            onSave = { name, weekdays, lifeArea, reminderTime ->
                 scope.launch {
                     repository.updateHabit(
                         habitId = editing.id,
                         name = name,
                         weekdays = weekdays,
                         effectiveDate = today,
-                        lifeArea = lifeArea
+                        lifeArea = lifeArea,
+                        reminderTime = reminderTime
                     ).onSuccess {
                         habitToEdit = null
                         snackbarHostState.showSnackbar("Habit updated")
@@ -633,7 +640,12 @@ fun HabitFormDialog(
     initialHabit: Habit?,
     effectiveDate: LocalDate,
     onDismiss: () -> Unit,
-    onSave: (name: String, weekdays: Set<DayOfWeek>, lifeArea: com.lifeanalytics.app.domain.model.LifeArea) -> Unit,
+    onSave: (
+        name: String,
+        weekdays: Set<DayOfWeek>,
+        lifeArea: com.lifeanalytics.app.domain.model.LifeArea,
+        reminderTime: java.time.LocalTime?
+    ) -> Unit,
     onDeactivate: (() -> Unit)?,
     onRequestDelete: (() -> Unit)?,
     defaultLifeArea: com.lifeanalytics.app.domain.model.LifeArea? = null
@@ -642,7 +654,13 @@ fun HabitFormDialog(
     val typography = LaTheme.typography
     val spacing = LaTheme.spacing
     val radii = LaTheme.radii
+    val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* Permission result handled gracefully by ReminderNotificationManager */ }
 
     val currentPeriod = initialHabit?.effectiveScheduleOn(effectiveDate)
         ?: initialHabit?.schedulePeriods?.lastOrNull()
@@ -655,7 +673,13 @@ fun HabitFormDialog(
             currentPeriod?.weekdays?.takeIf { it.isNotEmpty() } ?: DayOfWeek.entries.toSet()
         )
     }
+    var reminderTimeMinutes by rememberSaveable {
+        mutableStateOf<Int?>(initialHabit?.reminderTime?.let { it.hour * 60 + it.minute })
+    }
+    var showTimePicker by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
+
+    val reminderTime = reminderTimeMinutes?.let { java.time.LocalTime.of(it / 60, it % 60) }
 
     val everydaySet = DayOfWeek.entries.toSet()
     val weekdaysSet = setOf(
@@ -785,6 +809,51 @@ fun HabitFormDialog(
                 }
             }
 
+            // Optional Reminder Time
+            Text(
+                text = "Reminder time (optional)",
+                style = typography.label,
+                color = colors.textSecondary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(radii.shapeSm)
+                        .background(colors.surfaceVariant)
+                        .pressScaleClickable { showTimePicker = true }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = reminderTime?.let { DateAttributionPolicy.formatLocalTime(it) }
+                            ?: "No reminder",
+                        style = typography.body.copy(
+                            fontWeight = if (reminderTime != null) FontWeight.Medium else FontWeight.Normal
+                        ),
+                        color = if (reminderTime != null) colors.textPrimary else colors.textSecondary
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsNone,
+                        contentDescription = "Choose habit reminder time",
+                        tint = colors.accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                if (reminderTime != null) {
+                    LaTextButton(
+                        text = "Clear",
+                        onClick = { reminderTimeMinutes = null },
+                        color = colors.textSecondary
+                    )
+                }
+            }
+
             if (initialHabit != null) {
                 Text(
                     text = "Schedule edits apply from today forward and preserve past schedule history.",
@@ -850,11 +919,35 @@ fun HabitFormDialog(
                             validationError = "Select at least one scheduled weekday."
                             return@LaPrimaryButton
                         }
-                        onSave(trimmed, selectedDays, area)
+
+                        if (reminderTime != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            val app = context.applicationContext as? com.lifeanalytics.app.LifeAnalyticsApplication
+                            if (app != null && !app.reminderManager.hasNotificationPermission()) {
+                                scope.launch {
+                                    if (!app.preferencesRepository.hasPromptedNotificationPermission()) {
+                                        app.preferencesRepository.setPromptedNotificationPermission(true)
+                                        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+                            }
+                        }
+
+                        onSave(trimmed, selectedDays, area, reminderTime)
                     }
                 )
             }
         }
+    }
+
+    if (showTimePicker) {
+        com.lifeanalytics.app.core.designsystem.LaTimePickerDialog(
+            initialTime = reminderTime,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { picked ->
+                reminderTimeMinutes = picked.hour * 60 + picked.minute
+                showTimePicker = false
+            }
+        )
     }
 }
 

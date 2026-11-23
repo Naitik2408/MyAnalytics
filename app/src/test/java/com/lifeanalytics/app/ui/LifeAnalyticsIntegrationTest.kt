@@ -417,5 +417,80 @@ class LifeAnalyticsIntegrationTest {
         assertEquals(realCompletion.id, remainingCompletions.first().id)
         assertEquals(0, remainingTransactions.size)
     }
+
+    @Test
+    fun optionalTaskLifeArea_andHabitReminderTime_persistAndExcludeUnassignedFromAreaAnalytics() = runBlocking {
+        val today = timeProvider.todayLocalDate()
+
+        // 1. Create an unassigned task (lifeArea = null)
+        val unassigned = repository.createTask(
+            title = "Pick up a package for someone",
+            category = TaskCategory.PERSONAL,
+            plannedDate = today,
+            plannedTime = null,
+            estimatedDurationMinutes = null,
+            lifeArea = null
+        ).getOrThrow()
+        assertEquals(null, unassigned.lifeArea)
+
+        // 2. Create a Career task, then clear its Life Area via updateTask
+        val careerTask = repository.createTask(
+            title = "Prepare interview notes",
+            category = TaskCategory.WORK,
+            plannedDate = today,
+            plannedTime = java.time.LocalTime.of(10, 0),
+            estimatedDurationMinutes = 30,
+            lifeArea = com.lifeanalytics.app.domain.model.LifeArea.CAREER_PRODUCTIVITY
+        ).getOrThrow()
+        assertEquals(com.lifeanalytics.app.domain.model.LifeArea.CAREER_PRODUCTIVITY, careerTask.lifeArea)
+
+        val cleared = repository.updateTask(
+            taskId = careerTask.id,
+            title = careerTask.title,
+            category = careerTask.category,
+            plannedDate = careerTask.plannedDate,
+            plannedTime = careerTask.plannedTime,
+            estimatedDurationMinutes = careerTask.estimatedDurationMinutes,
+            lifeArea = null
+        ).getOrThrow()
+        assertEquals(null, cleared.lifeArea)
+
+        // 3. Verify unassigned tasks are NOT counted in Health or Career analytics
+        val allTasks = repository.observeAllTasks().first()
+        val perf = com.lifeanalytics.app.domain.analytics.LifeAnalyticsEngine.evaluatePeriodPerformance(
+            window = com.lifeanalytics.app.domain.analytics.AnalyticsTimeWindow.DAILY,
+            anchorDate = today,
+            today = today,
+            habits = emptyList(),
+            completions = emptyList(),
+            tasks = allTasks,
+            transactions = emptyList(),
+            monthlyBudgetMinor = null,
+            computeComparison = false
+        )
+        assertEquals(0, perf.health.healthTasksPlanned)
+        assertEquals(0, perf.career.totalPlannedTasks)
+
+        // 4. Create habit with reminderTime, then update and clear reminderTime
+        val habit = repository.createHabit(
+            name = "Morning stretch",
+            weekdays = DayOfWeek.entries.toSet(),
+            effectiveFrom = today,
+            lifeArea = com.lifeanalytics.app.domain.model.LifeArea.HEALTH_LIFESTYLE,
+            reminderTime = java.time.LocalTime.of(7, 30)
+        ).getOrThrow()
+        assertEquals(java.time.LocalTime.of(7, 30), habit.reminderTime)
+
+        val updatedHabit = repository.updateHabit(
+            habitId = habit.id,
+            name = habit.name,
+            weekdays = DayOfWeek.entries.toSet(),
+            effectiveDate = today,
+            lifeArea = habit.lifeArea,
+            reminderTime = null
+        ).getOrThrow()
+        assertEquals(null, updatedHabit.reminderTime)
+    }
 }
+
 

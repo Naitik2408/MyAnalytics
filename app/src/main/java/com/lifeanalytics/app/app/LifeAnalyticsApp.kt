@@ -63,7 +63,8 @@ fun LifeAnalyticsApp(
     repository: LifeAnalyticsRepository,
     preferencesRepository: PreferencesRepository,
     preferences: AppPreferences,
-    backupManager: BackupManager? = null
+    backupManager: BackupManager? = null,
+    reminderManager: com.lifeanalytics.app.data.notifications.ReminderNotificationManager? = null
 ) {
     val colors = LaTheme.colors
     val navController = rememberNavController()
@@ -88,6 +89,7 @@ fun LifeAnalyticsApp(
             }
             preferencesRepository.setHasSeededHistoricalSample(true)
         }
+        reminderManager?.syncAllReminders(repository, preferencesRepository)
     }
 
     val primaryRoutes = remember { PrimaryDestination.entries.map { it.route }.toSet() }
@@ -253,6 +255,7 @@ fun LifeAnalyticsApp(
                     preferencesRepository = preferencesRepository,
                     repository = repository,
                     backupManager = backupManager,
+                    reminderManager = reminderManager,
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

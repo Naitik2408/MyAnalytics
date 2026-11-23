@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -26,6 +27,11 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val CURRENCY_CODE = stringPreferencesKey("currency_code")
         val MONTHLY_BUDGET_MINOR = longPreferencesKey("monthly_budget_minor")
         val SAMPLE_HISTORY_SEEDED_V1 = booleanPreferencesKey("sample_history_jun_nov_2026_seeded_v1")
+        val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled_v1")
+        val TASK_REMINDERS_ENABLED = booleanPreferencesKey("task_reminders_enabled_v1")
+        val HABIT_REMINDERS_ENABLED = booleanPreferencesKey("habit_reminders_enabled_v1")
+        val TASK_REMINDER_OFFSET_MINUTES = intPreferencesKey("task_reminder_offset_minutes_v1")
+        val NOTIFICATION_PERMISSION_PROMPTED = booleanPreferencesKey("notification_permission_prompted_v1")
     }
 
     val preferencesFlow: Flow<AppPreferences> = dataStore.data.map { prefs ->
@@ -36,7 +42,11 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         AppPreferences(
             themeOption = theme,
             currencyCode = currency,
-            monthlyBudgetMinor = budget
+            monthlyBudgetMinor = budget,
+            notificationsEnabled = prefs[Keys.NOTIFICATIONS_ENABLED] ?: true,
+            taskRemindersEnabled = prefs[Keys.TASK_REMINDERS_ENABLED] ?: true,
+            habitRemindersEnabled = prefs[Keys.HABIT_REMINDERS_ENABLED] ?: true,
+            taskReminderOffsetMinutes = (prefs[Keys.TASK_REMINDER_OFFSET_MINUTES] ?: 15).coerceIn(0, 120)
         )
     }
 
@@ -53,6 +63,41 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setHasSeededHistoricalSample(seeded: Boolean) {
         dataStore.edit { prefs ->
             prefs[Keys.SAMPLE_HISTORY_SEEDED_V1] = seeded
+        }
+    }
+
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.NOTIFICATIONS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setTaskRemindersEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.TASK_REMINDERS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setHabitRemindersEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.HABIT_REMINDERS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setTaskReminderOffsetMinutes(offsetMinutes: Int) {
+        dataStore.edit { prefs ->
+            prefs[Keys.TASK_REMINDER_OFFSET_MINUTES] = offsetMinutes.coerceIn(0, 120)
+        }
+    }
+
+    suspend fun hasPromptedNotificationPermission(): Boolean {
+        val prefs = dataStore.data.first()
+        return prefs[Keys.NOTIFICATION_PERMISSION_PROMPTED] == true
+    }
+
+    suspend fun setPromptedNotificationPermission(prompted: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.NOTIFICATION_PERMISSION_PROMPTED] = prompted
         }
     }
 

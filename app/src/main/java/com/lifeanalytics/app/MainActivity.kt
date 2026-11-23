@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
         val repository = app.repository
         val preferencesRepository = app.preferencesRepository
         val backupManager = app.backupManager
+        val reminderManager = app.reminderManager
 
         setContent {
             val preferences by preferencesRepository.preferencesFlow.collectAsState(
@@ -40,7 +41,8 @@ class MainActivity : ComponentActivity() {
                     repository = repository,
                     preferencesRepository = preferencesRepository,
                     preferences = preferences,
-                    backupManager = backupManager
+                    backupManager = backupManager,
+                    reminderManager = reminderManager
                 )
             }
         }

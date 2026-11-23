@@ -152,7 +152,8 @@ data class Habit(
     val deactivatedAtEpochMillis: Long?,
     val deactivatedFromLocalDate: LocalDate?,
     val schedulePeriods: List<HabitSchedulePeriod> = emptyList(),
-    val lifeArea: LifeArea? = null
+    val lifeArea: LifeArea? = null,
+    val reminderTime: LocalTime? = null
 ) {
     fun effectiveScheduleOn(date: LocalDate): HabitSchedulePeriod? {
         val createdDate = java.time.Instant.ofEpochMilli(createdAtEpochMillis)
@@ -272,5 +273,9 @@ enum class AppThemeOption(val displayName: String) {
 data class AppPreferences(
     val themeOption: AppThemeOption = AppThemeOption.LIGHT,
     val currencyCode: String = "INR",
-    val monthlyBudgetMinor: Long? = null
+    val monthlyBudgetMinor: Long? = null,
+    val notificationsEnabled: Boolean = true,
+    val taskRemindersEnabled: Boolean = true,
+    val habitRemindersEnabled: Boolean = true,
+    val taskReminderOffsetMinutes: Int = 15
 )
