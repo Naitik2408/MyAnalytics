@@ -51,7 +51,7 @@ class ReminderNotificationManager(private val context: Context) {
         val taskChannel = NotificationChannel(
             CHANNEL_TASK_REMINDERS,
             "Task Reminders",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Reminders for scheduled tasks with a planned date and time."
         }
@@ -59,7 +59,7 @@ class ReminderNotificationManager(private val context: Context) {
         val habitChannel = NotificationChannel(
             CHANNEL_HABIT_REMINDERS,
             "Habit Reminders",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Recurring reminders on your active habit days."
         }
@@ -76,6 +76,15 @@ class ReminderNotificationManager(private val context: Context) {
                 appContext,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    fun canScheduleExactAlarms(): Boolean {
+        val manager = alarmManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            manager.canScheduleExactAlarms()
         } else {
             true
         }
@@ -211,10 +220,11 @@ class ReminderNotificationManager(private val context: Context) {
         }
 
         val notification = NotificationCompat.Builder(appContext, CHANNEL_TASK_REMINDERS)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
             .setContentTitle(task.title)
             .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(buildOpenAppIntent())
             .build()
@@ -233,10 +243,11 @@ class ReminderNotificationManager(private val context: Context) {
         val body = "${areaPrefix}Scheduled for today"
 
         val notification = NotificationCompat.Builder(appContext, CHANNEL_HABIT_REMINDERS)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
             .setContentTitle(habit.name)
             .setContentText(body)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(buildOpenAppIntent())
             .build()
@@ -247,11 +258,32 @@ class ReminderNotificationManager(private val context: Context) {
         }
     }
 
+    fun postTestNotification(): Boolean {
+        if (!hasNotificationPermission()) return false
+        ensureNotificationChannels()
+        val zone = ZoneId.systemDefault()
+        val nowTime = DateAttributionPolicy.formatLocalTime(ZonedDateTime.now(zone).toLocalTime())
+        val notification = NotificationCompat.Builder(appContext, CHANNEL_TASK_REMINDERS)
+            .setSmallIcon(R.drawable.ic_stat_reminder)
+            .setContentTitle("Life Analytics reminders active")
+            .setContentText("Test notification delivered at $nowTime (${zone.id})")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(buildOpenAppIntent())
+            .build()
+        return runCatching {
+            NotificationManagerCompat.from(appContext).notify(999_001, notification)
+            true
+        }.getOrDefault(false)
+    }
+
     private fun scheduleAlarmAt(triggerAtMillis: Long, pendingIntent: PendingIntent) {
         val manager = alarmManager ?: return
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && manager.canScheduleExactAlarms()) {
-                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            if (canScheduleExactAlarms()) {
+                val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, buildOpenAppIntent())
+                manager.setAlarmClock(alarmClockInfo, pendingIntent)
             } else {
                 manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
             }
@@ -291,8 +323,8 @@ class ReminderNotificationManager(private val context: Context) {
     }
 
     companion object {
-        const val CHANNEL_TASK_REMINDERS = "la_task_reminders"
-        const val CHANNEL_HABIT_REMINDERS = "la_habit_reminders"
+        const val CHANNEL_TASK_REMINDERS = "la_task_reminders_v2"
+        const val CHANNEL_HABIT_REMINDERS = "la_habit_reminders_v2"
         const val ACTION_TRIGGER_REMINDER = "com.lifeanalytics.app.ACTION_TRIGGER_REMINDER"
         const val EXTRA_REMINDER_TYPE = "extra_reminder_type"
         const val EXTRA_ENTITY_ID = "extra_entity_id"
@@ -305,6 +337,16 @@ class ReminderNotificationManager(private val context: Context) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             runCatching { context.startActivity(intent) }
+        }
+
+        fun openExactAlarmSettings(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = android.net.Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                runCatching { context.startActivity(intent) }
+            }
         }
     }
 }

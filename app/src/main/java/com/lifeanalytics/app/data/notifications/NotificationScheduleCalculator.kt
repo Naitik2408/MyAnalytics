@@ -33,8 +33,9 @@ object NotificationScheduleCalculator {
         val plannedTime = task.plannedTime ?: return null
         val clampedOffset = offsetMinutes.coerceIn(0, 120).toLong()
         val eventTime = ZonedDateTime.of(task.plannedDate, plannedTime, now.zone)
+        if (!eventTime.isAfter(now)) return null
         val triggerTime = eventTime.minusMinutes(clampedOffset)
-        return if (triggerTime.isAfter(now)) triggerTime else null
+        return if (triggerTime.isAfter(now)) triggerTime else eventTime
     }
 
     /**

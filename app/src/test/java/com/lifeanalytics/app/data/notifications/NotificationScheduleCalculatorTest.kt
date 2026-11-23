@@ -97,9 +97,13 @@ class NotificationScheduleCalculatorTest {
         val past = makeTask(plannedDate = LocalDate.of(2026, 11, 22), plannedTime = LocalTime.of(18, 0))
         assertNull(NotificationScheduleCalculator.computeTaskTriggerTime(past, 15, now))
 
-        // Offset pushes trigger into the past (14:10 - 15m = 13:55 <= 14:00)
-        val tooSoon = makeTask(plannedDate = LocalDate.of(2026, 11, 23), plannedTime = LocalTime.of(14, 10))
-        assertNull(NotificationScheduleCalculator.computeTaskTriggerTime(tooSoon, 15, now))
+        // Offset pushes trigger into the past (14:10 - 15m = 13:55 <= 14:00),
+        // so calculator falls back to exact eventTime (14:10) instead of dropping the reminder.
+        val shortNotice = makeTask(plannedDate = LocalDate.of(2026, 11, 23), plannedTime = LocalTime.of(14, 10))
+        assertEquals(
+            ZonedDateTime.of(LocalDate.of(2026, 11, 23), LocalTime.of(14, 10), istZone),
+            NotificationScheduleCalculator.computeTaskTriggerTime(shortNotice, 15, now)
+        )
     }
 
     @Test

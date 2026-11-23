@@ -77,10 +77,12 @@ fun LifeAnalyticsApp(
     var reviewDateEpoch by rememberSaveable { mutableStateOf(today.toEpochDay()) }
     var financeDayFilterEpoch by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    // Seed-once historical sample data (June 1 – Nov 18, 2026).
-    // Runs at most once if no historical sample data exists yet; never rebuilds on subsequent
-    // cold starts so user edits and deletions across Finance, Tasks, and Habits are permanent.
-    // Manual rebuild/removal remains available in Settings.
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { /* Sync triggered on next resume/action */ }
+
+    // Seed-once historical sample data (June 1 – Nov 18, 2026) + startup reminder sync
+    // + polite one-time Android 13+ notification permission request from the top-level host.
     LaunchedEffect(Unit) {
         repository.removeLegacyOctoberDemoData()
         if (!preferencesRepository.hasSeededHistoricalSample()) {
@@ -90,6 +92,15 @@ fun LifeAnalyticsApp(
             preferencesRepository.setHasSeededHistoricalSample(true)
         }
         reminderManager?.syncAllReminders(repository, preferencesRepository)
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            reminderManager != null &&
+            !reminderManager.hasNotificationPermission() &&
+            !preferencesRepository.hasPromptedNotificationPermission()
+        ) {
+            preferencesRepository.setPromptedNotificationPermission(true)
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     val primaryRoutes = remember { PrimaryDestination.entries.map { it.route }.toSet() }

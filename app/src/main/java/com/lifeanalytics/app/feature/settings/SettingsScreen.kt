@@ -116,6 +116,26 @@ fun SettingsScreen(
     var hasNotificationPermission by remember {
         mutableStateOf(reminderManager?.hasNotificationPermission() ?: true)
     }
+    var canScheduleExactAlarms by remember {
+        mutableStateOf(reminderManager?.canScheduleExactAlarms() ?: true)
+    }
+    var testNotificationStatus by remember { mutableStateOf<String?>(null) }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner, reminderManager) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                hasNotificationPermission = reminderManager?.hasNotificationPermission() ?: true
+                canScheduleExactAlarms = reminderManager?.canScheduleExactAlarms() ?: true
+                scope.launch {
+                    reminderManager?.syncAllReminders(repository, preferencesRepository)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -468,14 +488,85 @@ fun SettingsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(spacing.space3))
-                LaSecondaryButton(
-                    text = "Open Android Notification Settings",
-                    onClick = {
-                        com.lifeanalytics.app.data.notifications.ReminderNotificationManager
-                            .openAppNotificationSettings(context)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
+
+                // Exact Alarm Timing status (Android 12+) + Active local timezone
+                val activeZoneId = ZoneId.systemDefault().id
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(radii.shapeSm)
+                        .background(if (canScheduleExactAlarms) tints.mint.soft else tints.butter.soft)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (canScheduleExactAlarms) {
+                                "On-time alarms: Exact ($activeZoneId)"
+                            } else {
+                                "On-time alarms: Approximate ($activeZoneId)"
+                            },
+                            style = typography.label.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = if (canScheduleExactAlarms) {
+                                "Reminders fire right on schedule in your local timezone."
+                            } else {
+                                "Enable 'Alarms & reminders' so Android does not delay reminders."
+                            },
+                            style = typography.chartMicroLabel,
+                            color = colors.textSecondary
+                        )
+                    }
+                    if (!canScheduleExactAlarms && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        LaPrimaryButton(
+                            text = "Enable",
+                            onClick = {
+                                com.lifeanalytics.app.data.notifications.ReminderNotificationManager
+                                    .openExactAlarmSettings(context)
+                            }
+                        )
+                    }
+                }
+
+                if (testNotificationStatus != null) {
+                    Spacer(modifier = Modifier.height(spacing.space2))
+                    Text(
+                        text = testNotificationStatus!!,
+                        style = typography.chartMicroLabel,
+                        color = colors.textSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(spacing.space3))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(spacing.space2)
+                ) {
+                    LaPrimaryButton(
+                        text = "Send Test",
+                        onClick = {
+                            val sent = reminderManager?.postTestNotification() == true
+                            testNotificationStatus = if (sent) {
+                                "Test notification sent! Check your notification shade."
+                            } else {
+                                "Blocked: grant Android notification permission first."
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    LaSecondaryButton(
+                        text = "Android Settings",
+                        onClick = {
+                            com.lifeanalytics.app.data.notifications.ReminderNotificationManager
+                                .openAppNotificationSettings(context)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 

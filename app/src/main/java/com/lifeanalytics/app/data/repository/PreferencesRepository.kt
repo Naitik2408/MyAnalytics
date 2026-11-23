@@ -46,7 +46,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             notificationsEnabled = prefs[Keys.NOTIFICATIONS_ENABLED] ?: true,
             taskRemindersEnabled = prefs[Keys.TASK_REMINDERS_ENABLED] ?: true,
             habitRemindersEnabled = prefs[Keys.HABIT_REMINDERS_ENABLED] ?: true,
-            taskReminderOffsetMinutes = (prefs[Keys.TASK_REMINDER_OFFSET_MINUTES] ?: 15).coerceIn(0, 120)
+            taskReminderOffsetMinutes = (prefs[Keys.TASK_REMINDER_OFFSET_MINUTES] ?: 0).coerceIn(0, 120)
         )
     }
 

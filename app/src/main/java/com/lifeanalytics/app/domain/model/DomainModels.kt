@@ -277,5 +277,5 @@ data class AppPreferences(
     val notificationsEnabled: Boolean = true,
     val taskRemindersEnabled: Boolean = true,
     val habitRemindersEnabled: Boolean = true,
-    val taskReminderOffsetMinutes: Int = 15
+    val taskReminderOffsetMinutes: Int = 0
 )
